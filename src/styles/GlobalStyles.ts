@@ -1,19 +1,29 @@
 // src/styles/GlobalStyles.ts
-
 import { createGlobalStyle } from 'styled-components';
-import { theme } from './theme';
+import type { ThemeType } from './theme';
 
-export const GlobalStyles = createGlobalStyle`
-  body {
+export const GlobalStyle = createGlobalStyle<{ theme: ThemeType }>`
+  * {
     margin: 0;
-    font-family: ${theme.fonts.main};
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    background-color: ${theme.colors.light};
-    color: ${theme.colors.dark};
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
   }
 
-  * {
-    box-sizing: border-box;
+  body {
+    font-family: ${({ theme }) => theme.fonts.main};
+    background: ${({ theme }) => theme.colors.bodyBackground};
+    min-height: 100vh;
+    padding: 20px;
+
+    @media (max-width: 768px) {
+      padding: 0;
+    }
+  }
+
+  #root {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
   }
 `;

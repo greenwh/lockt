@@ -44,7 +44,7 @@ export interface CryptoEntry {
   pin: string;
   accountNumber?: string;
   routingNumber?: string;
-  recoveryPhrases?: string[];    // Array to support multiple phrases
+  recoveryPhrase?: string;    // A single recovery phrase
   email?: string;
   phone?: string;
   fax?: string;
@@ -61,7 +61,7 @@ export interface CryptoEntry {
 export interface FreetextEntry {
   id: string;
   title: string;                 // e.g., "John's SSN", "Home Insurance Policy"
-  category: string;              // e.g., "SSN", "Insurance", "Passport", "Custom"
+  description: string;              // e.g., "SSN", "Insurance", "Passport", "Custom"
   content: string;               // Main freetext content (rich text / markdown support)
   fields?: FreetextField[];      // Structured key-value pairs for semi-structured data
   attachedTo?: string;           // Optional: Person/family member name
@@ -110,6 +110,7 @@ export interface HealthImpairment {
   description: string;
   dateOfOnset?: number;          // Unix timestamp
   contributingConditionIds?: string[];  // References to HealthCondition IDs
+  elaboration?: string;          // Freetext for more detail
   createdAt: number;
   updatedAt: number;
 }

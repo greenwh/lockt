@@ -1,0 +1,59 @@
+// src/components/health/JournalForm.tsx
+import React, { useState } from 'react';
+import type { HealthJournalEntry } from '../../types/data.types';
+import Button from '../common/Button';
+import Input from '../common/Input';
+import { v4 as uuidv4 } from 'uuid';
+
+interface JournalFormProps {
+  onSave: (entry: HealthJournalEntry) => void;
+  onCancel: () => void;
+  existingEntry?: HealthJournalEntry;
+}
+
+const JournalForm: React.FC<JournalFormProps> = ({ onSave, onCancel, existingEntry }) => {
+  const [entry, setEntry] = useState<Omit<HealthJournalEntry, 'id' | 'createdAt' | 'updatedAt'>>(
+    existingEntry || {
+      date: Date.now(),
+      reasonForEntry: '',
+      painLevel: 0,
+      entry: '',
+    }
+  );
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setEntry((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { value } = e.target;
+    setEntry((prev) => ({ ...prev, date: new Date(value).getTime() }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const now = Date.now();
+    const finalEntry: HealthJournalEntry = {
+      id: existingEntry?.id || uuidv4(),
+      ...entry,
+      createdAt: existingEntry?.createdAt || now,
+      updatedAt: now,
+    };
+    onSave(finalEntry);
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Input label="Date" id="date" name="date" type="date" value={new Date(entry.date).toISOString().split('T')[0]} onChange={handleDateChange} required />
+      <Input label="Reason for Entry" id="reasonForEntry" name="reasonForEntry" value={entry.reasonForEntry} onChange={handleChange} required />
+      <Input label="Pain Level (0-10)" id="painLevel" name="painLevel" type="number" min="0" max="10" value={entry.painLevel} onChange={handleChange} required />
+      <label htmlFor="entry">Journal Entry</label>
+      <textarea id="entry" name="entry" value={entry.entry} onChange={handleChange} style={{ width: '100%', minHeight: '150px' }} required />
+      <Button type="submit">Save Journal Entry</Button>
+      <Button type="button" onClick={onCancel}>Cancel</Button>
+    </form>
+  );
+};
+
+export default JournalForm;
