@@ -1,6 +1,7 @@
 // src/services/database.service.ts
 
-import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import { openDB } from 'idb';
+import type { DBSchema, IDBPDatabase } from 'idb';
 import type { EncryptedData } from '../types/data.types';
 
 interface LocktDB extends DBSchema {

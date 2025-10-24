@@ -22,31 +22,49 @@ const ImpairmentForm: React.FC<ImpairmentFormProps> = ({ onSave, onCancel, exist
     }
   );
 
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isLoading, setIsLoading] = useState(false);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setEntry((prev) => ({ ...prev, [name]: value }));
+
+    // Clear error when user types
+    if (errors[name]) {
+      setErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
   };
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { value } = e.target;
     setEntry((prev) => ({ ...prev, dateOfOnset: new Date(value).getTime() }));
   };
-  
+
   const handleConditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedIds = Array.from(e.target.selectedOptions, option => option.value);
     setEntry(prev => ({ ...prev, contributingConditionIds: selectedIds }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const now = Date.now();
-    const finalEntry: HealthImpairment = {
-      id: existingEntry?.id || uuidv4(),
-      ...entry,
-      createdAt: existingEntry?.createdAt || now,
-      updatedAt: now,
-    };
-    onSave(finalEntry);
+
+    setIsLoading(true);
+    try {
+      const now = Date.now();
+      const finalEntry: HealthImpairment = {
+        id: existingEntry?.id || uuidv4(),
+        ...entry,
+        createdAt: existingEntry?.createdAt || now,
+        updatedAt: now,
+      };
+      onSave(finalEntry);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -65,7 +83,9 @@ const ImpairmentForm: React.FC<ImpairmentFormProps> = ({ onSave, onCancel, exist
         <label htmlFor="elaboration">Elaboration</label>
         <textarea id="elaboration" name="elaboration" value={entry.elaboration} onChange={handleChange} style={{ width: '100%', minHeight: '120px' }} />
       </div>
-      <Button type="submit">Save Impairment</Button>
+      <Button type="submit" disabled={isLoading}>
+        {isLoading ? 'Saving...' : 'Save Impairment'}
+      </Button>
       <Button type="button" onClick={onCancel}>Cancel</Button>
     </form>
   );
