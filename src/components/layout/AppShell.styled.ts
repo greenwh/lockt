@@ -23,6 +23,7 @@ export const AppHeader = styled.header`
   color: ${({ theme }) => theme.colors.textLight};
   padding: 30px;
   text-align: center;
+  position: relative;
 
   h1 {
     font-size: 2.5em;
@@ -33,6 +34,32 @@ export const AppHeader = styled.header`
   p {
     font-size: 1.1em;
     opacity: 0.9;
+  }
+`;
+
+export const HeaderActions = styled.div`
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  gap: ${({ theme }) => theme.spacing.md};
+  align-items: center;
+`;
+
+export const SettingsButton = styled.button`
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  color: ${({ theme }) => theme.colors.textLight};
+  padding: ${({ theme }) => theme.spacing.sm} ${({ theme }) => theme.spacing.md};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  cursor: pointer;
+  font-size: 0.9em;
+  font-weight: 500;
+  transition: all 0.3s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
   }
 `;
 
