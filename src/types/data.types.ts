@@ -52,6 +52,7 @@ export interface CryptoEntry {
   walletAddressBtc?: string;
   walletAddressSol?: string;
   walletAddressOther?: string;
+  notes?: string;
   createdAt: number;
   updatedAt: number;
   tags?: string[];
@@ -61,7 +62,8 @@ export interface CryptoEntry {
 export interface FreetextEntry {
   id: string;
   title: string;                 // e.g., "John's SSN", "Home Insurance Policy"
-  description: string;              // e.g., "SSN", "Insurance", "Passport", "Custom"
+  description: string;              // Detailed description of the entry
+  category?: string;                // e.g., "SSN", "Insurance", "Passport", "Custom"
   content: string;               // Main freetext content (rich text / markdown support)
   fields?: FreetextField[];      // Structured key-value pairs for semi-structured data
   attachedTo?: string;           // Optional: Person/family member name

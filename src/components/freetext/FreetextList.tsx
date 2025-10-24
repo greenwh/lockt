@@ -2,6 +2,8 @@
 import React, { useState } from 'react';
 import type { FreetextEntry } from '../../types/data.types';
 import Button from '../common/Button';
+import SearchBar from '../common/SearchBar';
+import Modal from '../common/Modal';
 import FreetextForm from './FreetextForm';
 import FreetextQuickView from './FreetextQuickView';
 import FreetextDetail from './FreetextDetail';
@@ -11,6 +13,11 @@ const FreetextList: React.FC = () => {
   const [selectedEntry, setSelectedEntry] = useState<FreetextEntry | null>(null);
   const [editingEntry, setEditingEntry] = useState<FreetextEntry | undefined>(undefined);
   const [isCreating, setIsCreating] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ isOpen: boolean; entryId: string | null }>({
+    isOpen: false,
+    entryId: null,
+  });
 
   const handleSave = (entry: FreetextEntry) => {
     setEntries((prev) => {
@@ -45,8 +52,43 @@ const FreetextList: React.FC = () => {
     setEditingEntry(entry);
   };
 
+  const handleDeleteClick = (entryId: string) => {
+    setDeleteConfirmModal({ isOpen: true, entryId });
+  };
+
+  const handleDeleteConfirm = () => {
+    if (deleteConfirmModal.entryId) {
+      setEntries((prev) => prev.filter((e) => e.id !== deleteConfirmModal.entryId));
+      setSelectedEntry(null);
+      setDeleteConfirmModal({ isOpen: false, entryId: null });
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirmModal({ isOpen: false, entryId: null });
+  };
+
+  // Filter entries based on search query
+  const filteredEntries = entries.filter((entry) => {
+    const query = searchQuery.toLowerCase();
+    return (
+      entry.title.toLowerCase().includes(query) ||
+      entry.category?.toLowerCase().includes(query) ||
+      entry.content?.toLowerCase().includes(query) ||
+      entry.notes?.toLowerCase().includes(query) ||
+      entry.tags?.some((tag) => tag.toLowerCase().includes(query))
+    );
+  });
+
   if (selectedEntry) {
-    return <FreetextDetail entry={selectedEntry} onClose={handleCloseDetail} onEdit={handleEdit} />;
+    return (
+      <FreetextDetail
+        entry={selectedEntry}
+        onClose={handleCloseDetail}
+        onEdit={handleEdit}
+        onDelete={handleDeleteClick}
+      />
+    );
   }
 
   if (isCreating || editingEntry) {
@@ -63,11 +105,45 @@ const FreetextList: React.FC = () => {
     <div>
       <h2>Freetext</h2>
       <Button onClick={() => setIsCreating(true)}>Add New Freetext Entry</Button>
+      <SearchBar
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Search freetext entries by title, category, content, tags..."
+      />
       <div>
-        {entries.map((entry) => (
-          <FreetextQuickView key={entry.id} entry={entry} onSelect={handleSelect} />
-        ))}
+        {filteredEntries.length === 0 ? (
+          <p style={{ textAlign: 'center', padding: '2rem', color: '#6c757d' }}>
+            {entries.length === 0
+              ? 'No freetext entries yet. Click "Add New Freetext Entry" to get started.'
+              : 'No freetext entries match your search.'}
+          </p>
+        ) : (
+          filteredEntries.map((entry) => (
+            <FreetextQuickView
+              key={entry.id}
+              entry={entry}
+              onSelect={handleSelect}
+              onDelete={handleDeleteClick}
+            />
+          ))
+        )}
       </div>
+
+      <Modal
+        isOpen={deleteConfirmModal.isOpen}
+        onClose={handleDeleteCancel}
+        title="Delete Freetext Entry"
+        footer={
+          <>
+            <Button onClick={handleDeleteCancel}>Cancel</Button>
+            <Button onClick={handleDeleteConfirm} style={{ background: '#dc3545' }}>
+              Delete
+            </Button>
+          </>
+        }
+      >
+        <p>Are you sure you want to delete this freetext entry? This action cannot be undone.</p>
+      </Modal>
     </div>
   );
 };

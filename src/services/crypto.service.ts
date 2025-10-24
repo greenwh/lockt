@@ -77,7 +77,7 @@ class CryptoService {
     return crypto.subtle.deriveKey(
       {
         name: 'PBKDF2',
-        salt: salt,
+        salt: salt as BufferSource,
         iterations: this.PBKDF2_ITERATIONS,
         hash: 'SHA-256'
       },
@@ -110,14 +110,14 @@ class CryptoService {
       // Encrypt data
       const encodedData = new TextEncoder().encode(data);
       const ciphertext = await crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv: iv },
+        { name: 'AES-GCM', iv: iv as BufferSource },
         key,
         encodedData
       );
 
       return {
-        iv: this.arrayBufferToBase64(iv),
-        salt: this.arrayBufferToBase64(actualSalt),
+        iv: this.arrayBufferToBase64(iv.buffer as ArrayBuffer),
+        salt: this.arrayBufferToBase64(actualSalt.buffer as ArrayBuffer),
         ciphertext: this.arrayBufferToBase64(ciphertext),
         version: this.ENCRYPTION_VERSION
       };
@@ -167,7 +167,7 @@ class CryptoService {
    * Generate a 12-word recovery phrase
    * Uses a simplified wordlist approach
    */
-  generateRecoveryPhrase(): RecoveryPhrase {
+  async generateRecoveryPhrase(): Promise<RecoveryPhrase> {
     // BIP39-style word list (simplified - in production use full BIP39 list)
     const wordList = [
       'abandon', 'ability', 'able', 'about', 'above', 'absent', 'absorb', 'abstract',
@@ -186,9 +186,8 @@ class CryptoService {
     }
 
     // Generate checksum (simple hash of words)
-    const checksum = this.arrayBufferToBase64(
-      crypto.subtle.digest('SHA-256', new TextEncoder().encode(words.join(' ')))
-    );
+    const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(words.join(' ')));
+    const checksum = this.arrayBufferToBase64(hashBuffer);
 
     return { words, checksum };
   }

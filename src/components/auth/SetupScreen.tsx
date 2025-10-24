@@ -11,8 +11,8 @@ const SetupScreen: React.FC = () => {
     generatePhrase();
   }, []);
 
-  const generatePhrase = () => {
-    const phrase = cryptoService.generateRecoveryPhrase();
+  const generatePhrase = async () => {
+    const phrase = await cryptoService.generateRecoveryPhrase();
     setRecoveryPhrase(phrase);
   };
 
