@@ -7,13 +7,42 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      includeAssets: ['favicon.ico', 'robots.txt', 'apple-touch-icon.png'],
       manifest: {
         name: 'Lockt',
         short_name: 'Lockt',
         description: 'Secure personal data storage',
         theme_color: '#1a1a1a',
         background_color: '#ffffff',
-        display: 'standalone'
+        display: 'standalone',
+        icons: [
+          {
+            src: 'icon-192x192.png',
+            sizes: '192x192',
+            type: 'image/png'
+          },
+          {
+            src: 'icon-512x512.png',
+            sizes: '512x512',
+            type: 'image/png'
+          }
+        ]
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/graph\.microsoft\.com\/.*/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'microsoft-graph-cache',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60
+              }
+            }
+          }
+        ]
       }
     })
   ]

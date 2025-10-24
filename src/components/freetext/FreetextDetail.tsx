@@ -4,24 +4,29 @@ import type { FreetextEntry } from '../../types/data.types';
 import Button from '../common/Button';
 
 interface FreetextDetailProps {
-  entry: FreetextEntry;
-  onClose: () => void;
-  onEdit: (entry: FreetextEntry) => void;
+    entry: FreetextEntry;
+    onClose: () => void;
+    onEdit: (entry: FreetextEntry) => void;
 }
 
 const FreetextDetail: React.FC<FreetextDetailProps> = ({ entry, onClose, onEdit }) => {
-  return (
-    <div>
-      <h2>{entry.title}</h2>
-      <p><strong>Description:</strong> {entry.description}</p>
-      <div style={{ whiteSpace: 'pre-wrap', background: '#f4f4f4', padding: '15px', borderRadius: '5px', margin: '15px 0' }}>
-        {entry.content}
-      </div>
-      {/* Render other fields as needed */}
-      <Button onClick={() => onEdit(entry)}>Edit</Button>
-      <Button onClick={onClose}>Close</Button>
-    </div>
-  );
+    return (
+        <div>
+            <h3>{entry.title}</h3>
+            <p><strong>Description:</strong> {entry.description}</p>
+            <pre>{entry.content}</pre>
+            {entry.fields && entry.fields.length > 0 && (
+                <div>
+                    <h4>Fields:</h4>
+                    {entry.fields.map(field => (
+                        <p key={field.id}><strong>{field.label}:</strong> {field.value}</p>
+                    ))}
+                </div>
+            )}
+            <Button onClick={() => onEdit(entry)}>Edit</Button>
+            <Button onClick={onClose} style={{ marginLeft: '10px' }}>Close</Button>
+        </div>
+    );
 };
 
 export default FreetextDetail;

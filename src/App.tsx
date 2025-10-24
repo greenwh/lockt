@@ -8,11 +8,18 @@ import CreditCardList from './components/credit-cards/CreditCardList';
 import CryptoList from './components/crypto/CryptoList';
 import FreetextList from './components/freetext/FreetextList';
 import HealthTabs from './components/health/HealthTabs';
+import SettingsPanel from './components/settings/SettingsPanel';
+import Button from './components/common/Button';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('passwords');
+  const [showSettings, setShowSettings] = useState(false);
 
   const renderContent = () => {
+    if (showSettings) {
+      return <SettingsPanel onClose={() => setShowSettings(false)} />;
+    }
+
     switch (activeTab) {
       case 'passwords':
         return <PasswordList />;
@@ -31,7 +38,12 @@ const App: React.FC = () => {
 
   return (
     <AppShell>
-      <TabNavigation activeTab={activeTab} onTabClick={setActiveTab} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <TabNavigation activeTab={activeTab} onTabClick={setActiveTab} />
+        <Button onClick={() => setShowSettings(!showSettings)}>
+          {showSettings ? 'Close Settings' : 'Settings'}
+        </Button>
+      </div>
       {renderContent()}
     </AppShell>
   );

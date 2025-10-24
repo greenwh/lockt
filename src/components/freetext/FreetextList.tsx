@@ -1,5 +1,6 @@
 // src/components/freetext/FreetextList.tsx
 import React, { useState } from 'react';
+import { useData } from '../../context/DataContext';
 import type { FreetextEntry } from '../../types/data.types';
 import Button from '../common/Button';
 import FreetextForm from './FreetextForm';
@@ -7,21 +8,17 @@ import FreetextQuickView from './FreetextQuickView';
 import FreetextDetail from './FreetextDetail';
 
 const FreetextList: React.FC = () => {
-  const [entries, setEntries] = useState<FreetextEntry[]>([]);
+  const { appData, addEntry, updateEntry } = useData();
   const [selectedEntry, setSelectedEntry] = useState<FreetextEntry | null>(null);
   const [editingEntry, setEditingEntry] = useState<FreetextEntry | undefined>(undefined);
   const [isCreating, setIsCreating] = useState(false);
 
   const handleSave = (entry: FreetextEntry) => {
-    setEntries((prev) => {
-      const existingIndex = prev.findIndex((e) => e.id === entry.id);
-      if (existingIndex > -1) {
-        const newEntries = [...prev];
-        newEntries[existingIndex] = entry;
-        return newEntries;
-      }
-      return [...prev, entry];
-    });
+    if (editingEntry) {
+      updateEntry('freetext', entry.id, entry);
+    } else {
+      addEntry('freetext', entry);
+    }
     setIsCreating(false);
     setEditingEntry(undefined);
     setSelectedEntry(entry);
@@ -61,10 +58,10 @@ const FreetextList: React.FC = () => {
 
   return (
     <div>
-      <h2>Freetext</h2>
-      <Button onClick={() => setIsCreating(true)}>Add New Freetext Entry</Button>
+      <h2>Freetext Notes</h2>
+      <Button onClick={() => setIsCreating(true)}>Add New Note</Button>
       <div>
-        {entries.map((entry) => (
+        {appData.freetext.map((entry) => (
           <FreetextQuickView key={entry.id} entry={entry} onSelect={handleSelect} />
         ))}
       </div>

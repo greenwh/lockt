@@ -2,67 +2,42 @@
 
 ## 1. Project Overview
 
-**Lockt** is a security-focused Progressive Web App (PWA) for storing sensitive personal data. It uses client-side encryption with OneDrive as the storage backend. The project is built with React, TypeScript, and Vite, featuring a mobile-first UI styled to match the aesthetic of the `PayTrax` application.
+**Lockt** is a security-focused Progressive Web App (PWA) for storing sensitive personal data. It uses **app-level password protection** with OneDrive as the storage backend, leveraging Microsoft's built-in encryption for data at rest and in transit. This simplified architecture removes client-side encryption, focusing on device-level security and seamless cloud sync. The project is built with React, TypeScript, and Vite.
 
-**Current Status (Phase 2 Complete):** The core UI foundation and all data entry/viewing components for every data category have been implemented. The application is functional with in-memory state management and is ready to proceed to Phase 3 (OneDrive Sync).
+**Current Status (Phase 3 Complete):** The application is feature-complete for its core requirements. All UI components are implemented, local data persistence via IndexedDB is fully functional, and OneDrive sync is integrated and working. The project is ready to proceed to Phase 4 (Biometric Auth).
 
-## 2. Technology Stack
+**Known Issue:** The project experiences a persistent, intermittent issue where the production build process (`npm run build`) hangs. A clean install of `node_modules` and downgrading Vite has proven to be a temporary fix. **It is highly recommended to use the development server (`npm run dev`) for running and testing the application.**
 
-- **Build Tool:** Vite
+## 2. Technology Stack & Services
+
+- **Build Tool:** Vite (v5.3.1)
 - **Framework:** React 18.x
 - **Language:** TypeScript 5.x
 - **Styling:** styled-components
-- **State Management:** React Hooks (`useState`)
-- **Dependencies:** `uuid`, `styled-components`
+- **State Management:** React Context + Hooks (`useData`)
+- **Local Database:** IndexedDB via `idb`
+- **Cloud Sync:** Microsoft OneDrive via MSAL.js and Graph API
+- **App Authentication:** Web Crypto API (SHA-256 for password hashing)
 
-## 3. Project Structure
+## 3. Project Status Summary
 
-```
-lockt/
-├── src/
-│   ├── components/
-│   │   ├── auth/
-│   │   ├── common/ (Button.tsx, Input.tsx)
-│   │   ├── credit-cards/ (CreditCardDetail.tsx, CreditCardForm.tsx, etc.)
-│   │   ├── crypto/ (CryptoDetail.tsx, CryptoForm.tsx, etc.)
-│   │   ├── freetext/ (FreetextDetail.tsx, FreetextForm.tsx, etc.)
-│   │   ├── health/ (HealthTabs.tsx, ProviderForm.tsx, ConditionList.tsx, etc.)
-│   │   ├── layout/ (AppShell.tsx, TabNavigation.tsx)
-│   │   └── passwords/ (PasswordDetail.tsx, PasswordForm.tsx, etc.)
-│   ├── styles/ (GlobalStyles.ts, theme.ts)
-│   ├── types/ (data.types.ts)
-│   ├── App.tsx
-│   └── main.tsx
-├── package.json
-├── tsconfig.json
-└── vite.config.ts
-```
+### Phase 1: Core Foundation - COMPLETE
+- **`auth.service.ts`:** Refactored to handle local password hashing (SHA-256) and session management.
+- **`database.service.ts`:** Refactored to store plain JSON `AppData` in IndexedDB, removing all client-side encryption logic.
+- **`DataContext.tsx`:** Implemented to provide global state management and abstract data persistence.
 
-## 4. Phase 2 Implementation Summary
+### Phase 2: Data Entry & Core UI - COMPLETE
+- **UI Implementation:** All components for Passwords, Credit Cards, Crypto, Freetext, and Health (including all sub-tabs) are fully implemented with styled forms, detail views, and list views.
+- **Data Integration:** All UI components are connected to the `DataContext`, enabling full CRUD (Create, Read, Update, Delete) functionality backed by local IndexedDB storage.
+- **Styling Reconciliation:** The UI has been restored to match the intended `PayTrax` aesthetic by correctly implementing all styled components.
+- **Feature Refinements:** Implemented user feedback, including adding CSC to credit card view, masked data to crypto view, and date/association fields to the health section.
 
-**Goal:** Build out all data entry forms and core UI, matching the `PayTrax` look and feel.
+### Phase 3: OneDrive Sync - COMPLETE
+- **`onedrive.service.ts`:** Fully implemented with MSAL.js for Microsoft authentication and Graph API calls for file operations (upload, download, metadata).
+- **`SyncSettings.tsx`:** UI component created and integrated, allowing users to sign in, sign out, and manually trigger a sync with OneDrive.
+- **Sync Logic:** The sync process correctly compares local and remote timestamps to determine whether to upload or download data.
 
-**Completed Tasks:**
-- **Theming & Styling:** Implemented a `styled-components` theme and global styles inspired by `PayTrax`.
-- **App Shell:** Created the main application layout (`AppShell`) with a consistent header and content area.
-- **Tab Navigation:** Built a top-level tab navigator for switching between data categories.
-- **Common Components:** Developed reusable `Button` and `Input` components.
-- **Data Sections Implemented (Full CRUD pattern):**
-    - **Passwords:** Form, Quick View, and Detail View created.
-    - **Credit Cards:** Form, Quick View, and Detail View created.
-    - **Crypto:** Form, Quick View, and Detail View created.
-    - **Freetext:** Form, Quick View, and Detail View created.
-- **Complex Health Section:**
-    - Implemented a sub-tab navigation for Providers, Conditions, Impairments, and Journal.
-    - Built out the full CRUD pattern for all four health sub-categories.
-    - Lifted state to the `HealthTabs` component to manage dependencies (e.g., linking Impairments to Conditions).
-- **Bug Fixes & Refinements:**
-    - Resolved multiple TypeScript `import type` errors.
-    - Fixed `styled-components` transient prop warnings.
-    - Adjusted UI based on feedback (e.g., making passwords visible, changing "Category" to "Description").
+## 4. Next Steps
 
-**Outcome:** All UI and in-memory data management for Phase 2 is complete. The application has a consistent and functional user interface for all specified data types.
-
-## 5. Next Steps
-
-- **Phase 3: OneDrive Sync:** Implement cloud synchronization with Microsoft OneDrive using MSAL.js and the Graph API.
+- **Phase 4: Biometric Auth:** Implement WebAuthn for biometric unlock (Face ID, Windows Hello, etc.) as outlined in the specification.
+- **Troubleshoot Build Issue:** Further investigate the root cause of the intermittent `npm run build` hang.

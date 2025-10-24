@@ -1,40 +1,34 @@
 // src/components/health/ImpairmentDetail.tsx
 import React from 'react';
-import type { HealthImpairment, HealthCondition } from '../../types/data.types';
+import type { HealthImpairment } from '../../types/data.types';
 import Button from '../common/Button';
+import { format } from 'date-fns';
+import { useData } from '../../context/DataContext';
 
 interface ImpairmentDetailProps {
-  entry: HealthImpairment;
-  conditions: HealthCondition[];
-  onClose: () => void;
-  onEdit: (entry: HealthImpairment) => void;
+    entry: HealthImpairment;
+    onClose: () => void;
+    onEdit: (entry: HealthImpairment) => void;
 }
 
-const ImpairmentDetail: React.FC<ImpairmentDetailProps> = ({ entry, conditions, onClose, onEdit }) => {
-  const onsetDate = entry.dateOfOnset
-    ? new Date(entry.dateOfOnset).toLocaleDateString()
-    : 'N/A';
+const ImpairmentDetail: React.FC<ImpairmentDetailProps> = ({ entry, onClose, onEdit }) => {
+    const { appData } = useData();
+    const associatedConditions = appData.health.conditions
+        .filter(c => entry.contributingConditionIds?.includes(c.id))
+        .map(c => c.condition)
+        .join(', ');
 
-  const contributingConditions = conditions
-    .filter(c => entry.contributingConditionIds?.includes(c.id))
-    .map(c => c.condition)
-    .join(', ');
-
-  return (
-    <div>
-      <h3>{entry.description}</h3>
-      <p><strong>Date of Onset:</strong> {onsetDate}</p>
-      <p><strong>Contributing Conditions:</strong> {contributingConditions}</p>
-      {entry.elaboration && (
-        <div style={{ whiteSpace: 'pre-wrap', background: '#f4f4f4', padding: '15px', borderRadius: '5px', margin: '15px 0' }}>
-          <strong>Elaboration:</strong>
-          <p>{entry.elaboration}</p>
+    return (
+        <div>
+            <h3>{entry.description}</h3>
+            {entry.dateOfOnset && <p><strong>Date of Onset:</strong> {format(new Date(entry.dateOfOnset), 'MM/dd/yyyy')}</p>}
+            {associatedConditions && <p><strong>Associated Conditions:</strong> {associatedConditions}</p>}
+            <p><strong>Elaboration:</strong></p>
+            <pre>{entry.elaboration}</pre>
+            <Button onClick={() => onEdit(entry)}>Edit</Button>
+            <Button onClick={onClose} style={{ marginLeft: '10px' }}>Close</Button>
         </div>
-      )}
-      <Button onClick={() => onEdit(entry)}>Edit</Button>
-      <Button onClick={onClose}>Close</Button>
-    </div>
-  );
+    );
 };
 
 export default ImpairmentDetail;

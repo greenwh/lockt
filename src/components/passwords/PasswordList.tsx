@@ -1,5 +1,6 @@
 // src/components/passwords/PasswordList.tsx
 import React, { useState } from 'react';
+import { useData } from '../../context/DataContext';
 import type { PasswordEntry } from '../../types/data.types';
 import Button from '../common/Button';
 import PasswordForm from './PasswordForm';
@@ -7,21 +8,17 @@ import PasswordQuickView from './PasswordQuickView';
 import PasswordDetail from './PasswordDetail';
 
 const PasswordList: React.FC = () => {
-  const [entries, setEntries] = useState<PasswordEntry[]>([]);
+  const { appData, addEntry, updateEntry } = useData();
   const [selectedEntry, setSelectedEntry] = useState<PasswordEntry | null>(null);
   const [editingEntry, setEditingEntry] = useState<PasswordEntry | undefined>(undefined);
   const [isCreating, setIsCreating] = useState(false);
 
   const handleSave = (entry: PasswordEntry) => {
-    setEntries((prev) => {
-      const existingIndex = prev.findIndex((e) => e.id === entry.id);
-      if (existingIndex > -1) {
-        const newEntries = [...prev];
-        newEntries[existingIndex] = entry;
-        return newEntries;
-      }
-      return [...prev, entry];
-    });
+    if (editingEntry) {
+      updateEntry('passwords', entry.id, entry);
+    } else {
+      addEntry('passwords', entry);
+    }
     setIsCreating(false);
     setEditingEntry(undefined);
     setSelectedEntry(entry); // Show detail view after save
@@ -64,7 +61,7 @@ const PasswordList: React.FC = () => {
       <h2>Passwords</h2>
       <Button onClick={() => setIsCreating(true)}>Add New Password</Button>
       <div>
-        {entries.map((entry) => (
+        {appData.passwords.map((entry) => (
           <PasswordQuickView key={entry.id} entry={entry} onSelect={handleSelect} />
         ))}
       </div>

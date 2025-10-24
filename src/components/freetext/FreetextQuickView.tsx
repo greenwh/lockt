@@ -4,17 +4,17 @@ import type { FreetextEntry } from '../../types/data.types';
 import { QuickViewRow, QuickViewCell } from './FreetextQuickView.styled';
 
 interface FreetextQuickViewProps {
-  entry: FreetextEntry;
-  onSelect: (entry: FreetextEntry) => void;
+    entry: FreetextEntry;
+    onSelect: (entry: FreetextEntry) => void;
 }
 
 const FreetextQuickView: React.FC<FreetextQuickViewProps> = ({ entry, onSelect }) => {
-  return (
-    <QuickViewRow onClick={() => onSelect(entry)}>
-      <QuickViewCell><strong>{entry.title}</strong></QuickViewCell>
-      <QuickViewCell>{entry.description}</QuickViewCell>
-    </QuickViewRow>
-  );
+    return (
+        <QuickViewRow onClick={() => onSelect(entry)}>
+            <QuickViewCell>{entry.title}</QuickViewCell>
+            <QuickViewCell>{entry.description}</QuickViewCell>
+        </QuickViewRow>
+    );
 };
 
 export default FreetextQuickView;
