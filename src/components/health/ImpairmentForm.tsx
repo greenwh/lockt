@@ -13,6 +13,9 @@ interface ImpairmentFormProps {
 }
 
 const ImpairmentForm: React.FC<ImpairmentFormProps> = ({ onSave, onCancel, existingEntry, conditions }) => {
+  // Ensure conditions is always an array (defensive check)
+  const safeConditions = Array.isArray(conditions) ? conditions : [];
+
   const [entry, setEntry] = useState<Omit<HealthImpairment, 'id' | 'createdAt' | 'updatedAt'>>(
     existingEntry || {
       description: '',
@@ -74,7 +77,7 @@ const ImpairmentForm: React.FC<ImpairmentFormProps> = ({ onSave, onCancel, exist
       <div>
         <label htmlFor="contributingConditionIds">Contributing Conditions</label>
         <select id="contributingConditionIds" name="contributingConditionIds" multiple value={entry.contributingConditionIds} onChange={handleConditionChange}>
-          {conditions.map(c => (
+          {safeConditions.map(c => (
             <option key={c.id} value={c.id}>{c.condition}</option>
           ))}
         </select>

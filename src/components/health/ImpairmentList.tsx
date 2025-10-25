@@ -24,16 +24,18 @@ const ImpairmentList: React.FC<ImpairmentListProps> = ({ entries, setEntries, co
     entryId: null,
   });
 
+  // Ensure entries is always an array (defensive check for data structure issues)
+  const safeEntries = Array.isArray(entries) ? entries : [];
+
   const handleSave = (entry: HealthImpairment) => {
-    setEntries((prev) => {
-      const existingIndex = prev.findIndex((e) => e.id === entry.id);
-      if (existingIndex > -1) {
-        const newEntries = [...prev];
-        newEntries[existingIndex] = entry;
-        return newEntries;
-      }
-      return [...prev, entry];
-    });
+    // Calculate the new entries array immediately
+    const newEntries = safeEntries.findIndex((e) => e.id === entry.id) > -1
+      ? safeEntries.map((e) => (e.id === entry.id ? entry : e))
+      : [...safeEntries, entry];
+
+    // Update the list state AND persist to parent
+    setEntries(newEntries);
+
     setIsCreating(false);
     setEditingEntry(undefined);
     setSelectedEntry(entry);
@@ -63,7 +65,10 @@ const ImpairmentList: React.FC<ImpairmentListProps> = ({ entries, setEntries, co
 
   const handleDeleteConfirm = () => {
     if (deleteConfirmModal.entryId) {
-      setEntries((prev) => prev.filter((e) => e.id !== deleteConfirmModal.entryId));
+      setEntries((prev) => {
+        const safePrev = Array.isArray(prev) ? prev : [];
+        return safePrev.filter((e) => e.id !== deleteConfirmModal.entryId);
+      });
       setSelectedEntry(null);
       setDeleteConfirmModal({ isOpen: false, entryId: null });
     }
@@ -74,7 +79,7 @@ const ImpairmentList: React.FC<ImpairmentListProps> = ({ entries, setEntries, co
   };
 
   // Filter entries based on search query
-  const filteredEntries = entries.filter((entry) => {
+  const filteredEntries = safeEntries.filter((entry) => {
     const query = searchQuery.toLowerCase();
     return entry.description.toLowerCase().includes(query);
   });
@@ -114,7 +119,7 @@ const ImpairmentList: React.FC<ImpairmentListProps> = ({ entries, setEntries, co
       <div>
         {filteredEntries.length === 0 ? (
           <p style={{ textAlign: 'center', padding: '2rem', color: '#6c757d' }}>
-            {entries.length === 0
+            {safeEntries.length === 0
               ? 'No impairments yet. Click "Add New Impairment" to get started.'
               : 'No impairments match your search.'}
           </p>

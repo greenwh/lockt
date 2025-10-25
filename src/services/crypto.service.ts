@@ -28,10 +28,10 @@ class CryptoService {
   }
 
   /**
-   * Convert ArrayBuffer to Base64 string
+   * Convert ArrayBuffer or Uint8Array to Base64 string
    */
-  private arrayBufferToBase64(buffer: ArrayBuffer): string {
-    const bytes = new Uint8Array(buffer);
+  private arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
+    const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
     let binary = '';
     for (let i = 0; i < bytes.length; i++) {
       binary += String.fromCharCode(bytes[i]);
@@ -98,29 +98,47 @@ class CryptoService {
     recoveryPhrase?: string
   ): Promise<EncryptedData> {
     try {
+      console.log('Encrypting with password:', password.substring(0, 3) + '***');
+      console.log('Data length:', data.length);
+
       // Generate salt if not provided (first-time encryption)
       const actualSalt = salt || this.generateSalt();
-      
+      console.log('Using salt length:', actualSalt.length);
+
       // Derive encryption key
       const key = await this.deriveKey(password, actualSalt, recoveryPhrase);
-      
+      console.log('Key derived successfully');
+
       // Generate IV
       const iv = this.generateIV();
-      
+      console.log('IV generated, length:', iv.length);
+
       // Encrypt data
       const encodedData = new TextEncoder().encode(data);
+      console.log('Encoded data length:', encodedData.length);
+
       const ciphertext = await crypto.subtle.encrypt(
         { name: 'AES-GCM', iv: iv as BufferSource },
         key,
         encodedData
       );
+      console.log('Encryption successful, ciphertext length:', new Uint8Array(ciphertext).length);
 
-      return {
-        iv: this.arrayBufferToBase64(iv.buffer as ArrayBuffer),
-        salt: this.arrayBufferToBase64(actualSalt.buffer as ArrayBuffer),
+      const result = {
+        iv: this.arrayBufferToBase64(iv),
+        salt: this.arrayBufferToBase64(actualSalt),
         ciphertext: this.arrayBufferToBase64(ciphertext),
         version: this.ENCRYPTION_VERSION
       };
+
+      console.log('EncryptedData result:', {
+        iv: result.iv.substring(0, 20) + '...',
+        salt: result.salt.substring(0, 20) + '...',
+        ciphertext: result.ciphertext.substring(0, 20) + '...',
+        version: result.version
+      });
+
+      return result;
     } catch (error) {
       console.error('Encryption failed:', error);
       throw new Error('Failed to encrypt data');
@@ -137,28 +155,50 @@ class CryptoService {
   ): Promise<string> {
     try {
       // Convert Base64 strings back to ArrayBuffers
+      console.log('Decrypting with password:', password.substring(0, 3) + '***');
+      console.log('EncryptedData structure:', {
+        iv: encryptedData.iv.substring(0, 20) + '...',
+        salt: encryptedData.salt.substring(0, 20) + '...',
+        ciphertext: encryptedData.ciphertext.substring(0, 20) + '...',
+        version: encryptedData.version
+      });
+
       const iv = this.base64ToArrayBuffer(encryptedData.iv);
       const salt = this.base64ToArrayBuffer(encryptedData.salt);
       const ciphertext = this.base64ToArrayBuffer(encryptedData.ciphertext);
 
+      console.log('Converted buffers:', {
+        ivLength: new Uint8Array(iv).length,
+        saltLength: new Uint8Array(salt).length,
+        ciphertextLength: new Uint8Array(ciphertext).length
+      });
+
       // Derive key with same salt
+      console.log('Deriving key with salt length:', new Uint8Array(salt).length);
       const key = await this.deriveKey(
-        password, 
-        new Uint8Array(salt), 
+        password,
+        new Uint8Array(salt),
         recoveryPhrase
       );
+      console.log('Key derived successfully');
 
       // Decrypt
+      console.log('Starting decryption with AES-GCM...');
       const decryptedData = await crypto.subtle.decrypt(
         { name: 'AES-GCM', iv: new Uint8Array(iv) },
         key,
-        ciphertext
+        new Uint8Array(ciphertext)
       );
 
+      console.log('Decryption successful, decoding...');
       // Decode to string
       return new TextDecoder().decode(decryptedData);
     } catch (error) {
       console.error('Decryption failed:', error);
+      console.error('Error details:', {
+        name: error instanceof Error ? error.name : 'unknown',
+        message: error instanceof Error ? error.message : 'unknown'
+      });
       throw new Error('Failed to decrypt data - incorrect password or corrupted data');
     }
   }

@@ -11,9 +11,9 @@ export const SyncStatusContainer = styled.div`
   box-shadow: ${({ theme }) => theme.boxShadow};
 `;
 
-export const StatusIcon = styled.span<{ status: string }>`
+export const StatusIcon = styled.span<{ $status: string }>`
   font-size: 1.2em;
-  animation: ${({ status }) => (status === 'syncing' ? 'rotate 1s linear infinite' : 'none')};
+  animation: ${({ $status }) => ($status === 'syncing' ? 'rotate 1s linear infinite' : 'none')};
 
   @keyframes rotate {
     from {
@@ -25,10 +25,10 @@ export const StatusIcon = styled.span<{ status: string }>`
   }
 `;
 
-export const StatusText = styled.span<{ status: string }>`
+export const StatusText = styled.span<{ $status: string }>`
   font-size: 0.875em;
-  color: ${({ theme, status }) => {
-    switch (status) {
+  color: ${({ theme, $status }) => {
+    switch ($status) {
       case 'success':
         return theme.colors.success;
       case 'error':

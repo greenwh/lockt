@@ -49,7 +49,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, footer 
   };
 
   return (
-    <ModalOverlay isOpen={isOpen} onClick={handleOverlayClick}>
+    <ModalOverlay $isOpen={isOpen} onClick={handleOverlayClick}>
       <ModalContent>
         <ModalHeader>
           <ModalTitle>{title}</ModalTitle>

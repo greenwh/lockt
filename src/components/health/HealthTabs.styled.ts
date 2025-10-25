@@ -7,7 +7,7 @@ export const SubNavContainer = styled.div`
   margin-bottom: ${({ theme }) => theme.spacing.lg};
 `;
 
-export const SubNavButton = styled.button<{ isActive: boolean }>`
+export const SubNavButton = styled.button<{ $isActive: boolean }>`
   padding: 10px 15px;
   background: none;
   border: none;
@@ -18,8 +18,8 @@ export const SubNavButton = styled.button<{ isActive: boolean }>`
   border-bottom: 2px solid transparent;
   transition: all 0.3s ease;
 
-  ${({ isActive, theme }) =>
-    isActive &&
+  ${({ $isActive, theme }) =>
+    $isActive &&
     `
     color: ${theme.colors.primary};
     border-bottom-color: ${theme.colors.primary};

@@ -1,6 +1,7 @@
 // src/components/passwords/PasswordList.tsx
 import React, { useState } from 'react';
 import type { PasswordEntry } from '../../types/data.types';
+import { useAuth } from '../../context/AuthContext';
 import Button from '../common/Button';
 import SearchBar from '../common/SearchBar';
 import Modal from '../common/Modal';
@@ -9,7 +10,9 @@ import PasswordQuickView from './PasswordQuickView';
 import PasswordDetail from './PasswordDetail';
 
 const PasswordList: React.FC = () => {
-  const [entries, setEntries] = useState<PasswordEntry[]>([]);
+  const { appData, updatePasswords } = useAuth();
+  const entries = appData?.passwords || [];
+  const [savedError, setSavedError] = useState<string | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<PasswordEntry | null>(null);
   const [editingEntry, setEditingEntry] = useState<PasswordEntry | undefined>(undefined);
   const [isCreating, setIsCreating] = useState(false);
@@ -19,19 +22,28 @@ const PasswordList: React.FC = () => {
     entryId: null,
   });
 
-  const handleSave = (entry: PasswordEntry) => {
-    setEntries((prev) => {
-      const existingIndex = prev.findIndex((e) => e.id === entry.id);
+  const handleSave = async (entry: PasswordEntry) => {
+    try {
+      setSavedError(null);
+      const existingIndex = entries.findIndex((e) => e.id === entry.id);
+      let updatedEntries: PasswordEntry[];
+
       if (existingIndex > -1) {
-        const newEntries = [...prev];
-        newEntries[existingIndex] = entry;
-        return newEntries;
+        updatedEntries = [...entries];
+        updatedEntries[existingIndex] = entry;
+      } else {
+        updatedEntries = [...entries, entry];
       }
-      return [...prev, entry];
-    });
-    setIsCreating(false);
-    setEditingEntry(undefined);
-    setSelectedEntry(entry); // Show detail view after save
+
+      await updatePasswords(updatedEntries);
+      setIsCreating(false);
+      setEditingEntry(undefined);
+      setSelectedEntry(entry); // Show detail view after save
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save password';
+      setSavedError(message);
+      console.error('Save failed:', err);
+    }
   };
 
   const handleCancel = () => {
@@ -56,10 +68,18 @@ const PasswordList: React.FC = () => {
     setDeleteConfirmModal({ isOpen: true, entryId });
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (deleteConfirmModal.entryId) {
-      setEntries((prev) => prev.filter((e) => e.id !== deleteConfirmModal.entryId));
-      setDeleteConfirmModal({ isOpen: false, entryId: null });
+      try {
+        setSavedError(null);
+        const updatedEntries = entries.filter((e) => e.id !== deleteConfirmModal.entryId);
+        await updatePasswords(updatedEntries);
+        setDeleteConfirmModal({ isOpen: false, entryId: null });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to delete password';
+        setSavedError(message);
+        console.error('Delete failed:', err);
+      }
     }
   };
 

@@ -1,6 +1,7 @@
 // src/components/freetext/FreetextList.tsx
 import React, { useState } from 'react';
 import type { FreetextEntry } from '../../types/data.types';
+import { useAuth } from '../../context/AuthContext';
 import Button from '../common/Button';
 import SearchBar from '../common/SearchBar';
 import Modal from '../common/Modal';
@@ -9,7 +10,9 @@ import FreetextQuickView from './FreetextQuickView';
 import FreetextDetail from './FreetextDetail';
 
 const FreetextList: React.FC = () => {
-  const [entries, setEntries] = useState<FreetextEntry[]>([]);
+  const { appData, updateFreetext } = useAuth();
+  const entries = appData?.freetext || [];
+  const [savedError, setSavedError] = useState<string | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<FreetextEntry | null>(null);
   const [editingEntry, setEditingEntry] = useState<FreetextEntry | undefined>(undefined);
   const [isCreating, setIsCreating] = useState(false);
@@ -19,19 +22,28 @@ const FreetextList: React.FC = () => {
     entryId: null,
   });
 
-  const handleSave = (entry: FreetextEntry) => {
-    setEntries((prev) => {
-      const existingIndex = prev.findIndex((e) => e.id === entry.id);
+  const handleSave = async (entry: FreetextEntry) => {
+    try {
+      setSavedError(null);
+      const existingIndex = entries.findIndex((e) => e.id === entry.id);
+      let updatedEntries: FreetextEntry[];
+
       if (existingIndex > -1) {
-        const newEntries = [...prev];
-        newEntries[existingIndex] = entry;
-        return newEntries;
+        updatedEntries = [...entries];
+        updatedEntries[existingIndex] = entry;
+      } else {
+        updatedEntries = [...entries, entry];
       }
-      return [...prev, entry];
-    });
-    setIsCreating(false);
-    setEditingEntry(undefined);
-    setSelectedEntry(entry);
+
+      await updateFreetext(updatedEntries);
+      setIsCreating(false);
+      setEditingEntry(undefined);
+      setSelectedEntry(entry); // Show detail view after save
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save freetext entry';
+      setSavedError(message);
+      console.error('Save failed:', err);
+    }
   };
 
   const handleCancel = () => {
@@ -56,11 +68,19 @@ const FreetextList: React.FC = () => {
     setDeleteConfirmModal({ isOpen: true, entryId });
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (deleteConfirmModal.entryId) {
-      setEntries((prev) => prev.filter((e) => e.id !== deleteConfirmModal.entryId));
-      setSelectedEntry(null);
-      setDeleteConfirmModal({ isOpen: false, entryId: null });
+      try {
+        setSavedError(null);
+        const updatedEntries = entries.filter((e) => e.id !== deleteConfirmModal.entryId);
+        await updateFreetext(updatedEntries);
+        setSelectedEntry(null);
+        setDeleteConfirmModal({ isOpen: false, entryId: null });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to delete freetext entry';
+        setSavedError(message);
+        console.error('Delete failed:', err);
+      }
     }
   };
 

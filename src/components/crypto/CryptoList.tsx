@@ -1,6 +1,7 @@
 // src/components/crypto/CryptoList.tsx
 import React, { useState } from 'react';
 import type { CryptoEntry } from '../../types/data.types';
+import { useAuth } from '../../context/AuthContext';
 import Button from '../common/Button';
 import SearchBar from '../common/SearchBar';
 import Modal from '../common/Modal';
@@ -9,7 +10,9 @@ import CryptoQuickView from './CryptoQuickView';
 import CryptoDetail from './CryptoDetail';
 
 const CryptoList: React.FC = () => {
-  const [entries, setEntries] = useState<CryptoEntry[]>([]);
+  const { appData, updateCrypto } = useAuth();
+  const cryptoEntries = appData?.crypto || [];
+  const [savedError, setSavedError] = useState<string | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<CryptoEntry | null>(null);
   const [editingEntry, setEditingEntry] = useState<CryptoEntry | undefined>(undefined);
   const [isCreating, setIsCreating] = useState(false);
@@ -19,19 +22,28 @@ const CryptoList: React.FC = () => {
     entryId: null,
   });
 
-  const handleSave = (entry: CryptoEntry) => {
-    setEntries((prev) => {
-      const existingIndex = prev.findIndex((e) => e.id === entry.id);
+  const handleSave = async (entry: CryptoEntry) => {
+    try {
+      setSavedError(null);
+      const existingIndex = cryptoEntries.findIndex((e) => e.id === entry.id);
+      let updatedEntries: CryptoEntry[];
+
       if (existingIndex > -1) {
-        const newEntries = [...prev];
-        newEntries[existingIndex] = entry;
-        return newEntries;
+        updatedEntries = [...cryptoEntries];
+        updatedEntries[existingIndex] = entry;
+      } else {
+        updatedEntries = [...cryptoEntries, entry];
       }
-      return [...prev, entry];
-    });
-    setIsCreating(false);
-    setEditingEntry(undefined);
-    setSelectedEntry(entry);
+
+      await updateCrypto(updatedEntries);
+      setIsCreating(false);
+      setEditingEntry(undefined);
+      setSelectedEntry(entry); // Show detail view after save
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save crypto entry';
+      setSavedError(message);
+      console.error('Save failed:', err);
+    }
   };
 
   const handleCancel = () => {
@@ -56,11 +68,19 @@ const CryptoList: React.FC = () => {
     setDeleteConfirmModal({ isOpen: true, entryId });
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (deleteConfirmModal.entryId) {
-      setEntries((prev) => prev.filter((e) => e.id !== deleteConfirmModal.entryId));
-      setSelectedEntry(null);
-      setDeleteConfirmModal({ isOpen: false, entryId: null });
+      try {
+        setSavedError(null);
+        const updatedEntries = cryptoEntries.filter((e) => e.id !== deleteConfirmModal.entryId);
+        await updateCrypto(updatedEntries);
+        setSelectedEntry(null);
+        setDeleteConfirmModal({ isOpen: false, entryId: null });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to delete crypto entry';
+        setSavedError(message);
+        console.error('Delete failed:', err);
+      }
     }
   };
 
@@ -69,7 +89,7 @@ const CryptoList: React.FC = () => {
   };
 
   // Filter entries based on search query
-  const filteredEntries = entries.filter((entry) => {
+  const filteredEntries = cryptoEntries.filter((entry) => {
     const query = searchQuery.toLowerCase();
     return (
       entry.account.toLowerCase().includes(query) ||
@@ -116,7 +136,7 @@ const CryptoList: React.FC = () => {
       <div>
         {filteredEntries.length === 0 ? (
           <p style={{ textAlign: 'center', padding: '2rem', color: '#6c757d' }}>
-            {entries.length === 0
+            {cryptoEntries.length === 0
               ? 'No crypto entries yet. Click "Add New Crypto Entry" to get started.'
               : 'No crypto entries match your search.'}
           </p>
