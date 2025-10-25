@@ -74,7 +74,9 @@ class DatabaseService {
 
     // If saving salt, also backup to localStorage and OneDrive
     if (key === 'salt' && typeof value === 'string') {
+      console.log('database.service: Saving salt, triggering backups...');
       await saltRecoveryService.saveSaltBackups(value);
+      console.log('database.service: Salt backups completed');
     }
   }
 

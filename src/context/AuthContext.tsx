@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import type { AppData, PasswordEntry, CreditCardEntry, CryptoEntry, FreetextEntry, HealthData } from '../types/data.types';
 import { cryptoService } from '../services/crypto.service';
 import { databaseService } from '../services/database.service';
+import { oneDriveService } from '../services/onedrive.service';
 
 /**
  * Helper to convert Base64 string to Uint8Array
@@ -98,9 +99,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setError(null);
 
         // Get encrypted data (includes salt)
-        const encryptedData = await databaseService.getEncryptedData();
+        let encryptedData = await databaseService.getEncryptedData();
+
+        // If no local data, try downloading from OneDrive (fresh device scenario)
         if (!encryptedData) {
-          throw new Error('Account not initialized. Please set up a new account first.');
+          console.log('AuthContext: No local data found, attempting to download from OneDrive...');
+
+          if (oneDriveService.isSignedIn()) {
+            const downloadedData = await oneDriveService.downloadData();
+            if (downloadedData) {
+              console.log('AuthContext: Data downloaded from OneDrive');
+              // Save to local IndexedDB
+              await databaseService.saveEncryptedData(downloadedData);
+              encryptedData = downloadedData;
+            } else {
+              console.log('AuthContext: No data found on OneDrive');
+            }
+          } else {
+            console.log('AuthContext: OneDrive not signed in, cannot download');
+          }
+
+          // If still no data after download attempt, throw error
+          if (!encryptedData) {
+            throw new Error('No encrypted data found. Please sign in to OneDrive to download your data, or set up a new account.');
+          }
         }
 
         // Decrypt (salt is already in encryptedData)
