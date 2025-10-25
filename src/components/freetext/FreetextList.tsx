@@ -12,7 +12,7 @@ import FreetextDetail from './FreetextDetail';
 const FreetextList: React.FC = () => {
   const { appData, updateFreetext } = useAuth();
   const entries = appData?.freetext || [];
-  const [savedError, setSavedError] = useState<string | null>(null);
+  const [_savedError, setSavedError] = useState<string | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<FreetextEntry | null>(null);
   const [editingEntry, setEditingEntry] = useState<FreetextEntry | undefined>(undefined);
   const [isCreating, setIsCreating] = useState(false);

@@ -1,6 +1,5 @@
 // src/components/health/HealthTabs.tsx
 import React, { useState } from 'react';
-import type { HealthProvider, HealthCondition, HealthImpairment, HealthJournalEntry } from '../../types/data.types';
 import { useAuth } from '../../context/AuthContext';
 import { SubNavContainer, SubNavButton } from './HealthTabs.styled';
 import ProviderList from './ProviderList';
@@ -43,27 +42,38 @@ const HealthTabs: React.FC = () => {
     await updateHealth(newHealth);
   };
 
+  // Helper to create setEntries handler that properly handles SetStateAction
+  const createSetEntries = <T,>(key: keyof typeof safeHealthData) => {
+    return (action: React.SetStateAction<T[]>) => {
+      const currentArray = safeHealthData[key] as T[];
+      const newArray = typeof action === 'function'
+        ? (action as (prev: T[]) => T[])(currentArray)
+        : action;
+      void handleHealthUpdate({ [key]: newArray });
+    };
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'providers':
         return (
           <ProviderList
             entries={safeHealthData.providers}
-            setEntries={(entries) => handleHealthUpdate({ providers: entries })}
+            setEntries={createSetEntries('providers')}
           />
         );
       case 'conditions':
         return (
           <ConditionList
             entries={safeHealthData.conditions}
-            setEntries={(entries) => handleHealthUpdate({ conditions: entries })}
+            setEntries={createSetEntries('conditions')}
           />
         );
       case 'impairments':
         return (
           <ImpairmentList
             entries={safeHealthData.impairments}
-            setEntries={(entries) => handleHealthUpdate({ impairments: entries })}
+            setEntries={createSetEntries('impairments')}
             conditions={safeHealthData.conditions}
           />
         );
@@ -71,14 +81,14 @@ const HealthTabs: React.FC = () => {
         return (
           <JournalList
             entries={safeHealthData.journal}
-            setEntries={(entries) => handleHealthUpdate({ journal: entries })}
+            setEntries={createSetEntries('journal')}
           />
         );
       default:
         return (
           <ProviderList
             entries={safeHealthData.providers}
-            setEntries={(entries) => handleHealthUpdate({ providers: entries })}
+            setEntries={createSetEntries('providers')}
           />
         );
     }

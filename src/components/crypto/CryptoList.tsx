@@ -12,7 +12,7 @@ import CryptoDetail from './CryptoDetail';
 const CryptoList: React.FC = () => {
   const { appData, updateCrypto } = useAuth();
   const cryptoEntries = appData?.crypto || [];
-  const [savedError, setSavedError] = useState<string | null>(null);
+  const [_savedError, setSavedError] = useState<string | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<CryptoEntry | null>(null);
   const [editingEntry, setEditingEntry] = useState<CryptoEntry | undefined>(undefined);
   const [isCreating, setIsCreating] = useState(false);
