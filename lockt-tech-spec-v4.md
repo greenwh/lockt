@@ -1146,6 +1146,95 @@ This approach enables what users recognize as **Passkeys**, which are securely s
 - Reliable sync across devices
 - Conflict resolution UI
 
+### Phase 3a: Sync Reliability & Recovery
+**Goal**: Make OneDrive sync production-ready with recovery mechanisms and user controls
+
+**Tasks**:
+1. Implement salt storage in both IndexedDB and browser localStorage as backup
+2. Create account recovery flow using stored salt from OneDrive or localStorage
+3. Build sync settings UI component (toggle auto-sync, set frequency, Wi-Fi only option)
+4. Implement sync status notifications (toast/snackbar for success/failure/conflict)
+5. Create conflict resolution dialog (show timestamps, let user choose local/remote/merge)
+6. Add sync progress indicators during upload/download
+7. Implement retry logic for failed syncs with exponential backoff
+8. Add "Last Sync" timestamp display in UI
+9. Create sync error handling and user-friendly error messages
+10. Test multi-device sync scenarios with conflict detection
+
+**Implementation Details**:
+
+#### 3a.1: Salt Recovery Mechanism
+```typescript
+// Store salt in multiple locations for recovery
+// 1. IndexedDB app-config (current)
+// 2. localStorage as backup (survives IndexedDB clear)
+// 3. OneDrive metadata file (recovery from new device)
+
+localStorage.setItem('lockt-salt-backup', saltBase64)
+// Plus add to sync.service.ts:
+// Upload lockt-salt-metadata.json to OneDrive for new device recovery
+```
+
+#### 3a.2: Sync Settings UI Component
+**File**: `src/components/sync/SyncSettings.tsx`
+```typescript
+interface SyncSettings {
+  autoSync: boolean;           // Enable/disable auto-sync
+  syncInterval: number;        // Minutes between auto-syncs (15, 30, 60)
+  wifiOnly: boolean;          // Only sync on Wi-Fi
+  conflictResolution: 'newest' | 'manual' | 'merge'; // Strategy
+  retryOnFailure: boolean;    // Auto-retry failed syncs
+}
+
+// UI: Toggle switches, dropdown for interval, checkboxes
+// Store in IndexedDB app-config
+```
+
+#### 3a.3: Conflict Resolution Dialog
+**File**: `src/components/sync/ConflictResolutionDialog.tsx`
+```typescript
+interface ConflictResolution {
+  action: 'keep-local' | 'download-remote' | 'merge';
+  localTimestamp: number;
+  remoteTimestamp: number;
+  selectedChoice?: 'local' | 'remote';
+}
+
+// Show:
+// - Local version (timestamp, data preview)
+// - Remote version (timestamp, data preview)
+// - Options: Keep Local, Download Remote, Manual Merge
+```
+
+#### 3a.4: Sync Status Notifications
+**File**: `src/components/sync/SyncStatusToast.tsx`
+```typescript
+// Show brief toast on:
+// - Sync started: "Syncing to OneDrive..."
+// - Sync success: "✓ Synced successfully (23:45)"
+// - Sync failed: "✗ Sync failed. Retry?"
+// - Conflict: "⚠ Conflict detected. Resolve?"
+```
+
+#### 3a.5: Sync Progress & Last Sync Info
+**File**: Update `src/components/layout/Header.tsx` or `src/components/sync/SyncStatus.tsx`
+```typescript
+// Display:
+// - Last sync time: "Last synced 2 minutes ago"
+// - Sync status icon: (syncing) | ✓ | ✗
+// - Manual sync button with loading state
+```
+
+**Deliverables**:
+- ✅ Account recovery possible after IndexedDB deletion
+- ✅ User-configurable sync settings with persistent storage
+- ✅ Conflict resolution dialog with user choice
+- ✅ Real-time sync status notifications in UI
+- ✅ Last sync timestamp display
+- ✅ Robust error handling with retry logic
+- ✅ Multi-device sync with collision detection and resolution
+- ✅ Documentation of recovery procedures for users
+
 ### Phase 4: Biometric Auth 
 **Goal**: Add WebAuthn biometric authentication
 
