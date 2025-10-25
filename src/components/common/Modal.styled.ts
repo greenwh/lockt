@@ -1,8 +1,8 @@
 // src/components/common/Modal.styled.ts
 import styled from 'styled-components';
 
-export const ModalOverlay = styled.div<{ isOpen: boolean }>`
-  display: ${({ isOpen }) => (isOpen ? 'flex' : 'none')};
+export const ModalOverlay = styled.div<{ $isOpen: boolean }>`
+  display: ${({ $isOpen }) => ($isOpen ? 'flex' : 'none')};
   position: fixed;
   top: 0;
   left: 0;

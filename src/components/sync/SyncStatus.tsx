@@ -74,9 +74,9 @@ const SyncStatus: React.FC = () => {
 
   return (
     <SyncStatusContainer>
-      <StatusIcon status={syncState.status}>{getStatusIcon()}</StatusIcon>
+      <StatusIcon $status={syncState.status}>{getStatusIcon()}</StatusIcon>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        <StatusText status={syncState.status}>{getStatusText()}</StatusText>
+        <StatusText $status={syncState.status}>{getStatusText()}</StatusText>
         {syncState.lastSyncTime && <LastSyncTime>{formatLastSyncTime()}</LastSyncTime>}
         {syncState.accountName && (
           <LastSyncTime title={syncState.accountName}>

@@ -50,6 +50,9 @@ class SyncService {
     this.syncInProgress = true;
 
     try {
+      // Initialize database first
+      await databaseService.init();
+
       // Get local encrypted data
       const localEncrypted = await databaseService.getEncryptedData();
       const localTimestamp = (await databaseService.getConfig('lastModified')) || 0;
@@ -105,6 +108,9 @@ class SyncService {
     }
 
     try {
+      // Initialize database first
+      await databaseService.init();
+
       const localEncrypted = await databaseService.getEncryptedData();
       if (!localEncrypted) {
         return { success: false, error: 'No local data to upload' };
@@ -133,6 +139,9 @@ class SyncService {
     }
 
     try {
+      // Initialize database first
+      await databaseService.init();
+
       const remoteData = await oneDriveService.downloadData();
       if (!remoteData) {
         return { success: false, error: 'No remote data found' };

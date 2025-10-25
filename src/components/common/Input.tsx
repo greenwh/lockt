@@ -12,7 +12,7 @@ const Input: React.FC<InputProps> = ({ label, id, error, ...props }) => {
   return (
     <InputWrapper>
       <StyledLabel htmlFor={id}>{label}</StyledLabel>
-      <StyledInput id={id} hasError={!!error} {...props} />
+      <StyledInput id={id} $hasError={!!error} {...props} />
       {error && <ErrorMessage>{error}</ErrorMessage>}
     </InputWrapper>
   );
