@@ -13,8 +13,12 @@ export const theme = {
     lightGrey: '#e9ecef',
     text: '#495057',
     textLight: '#ffffff',
+    textSecondary: '#6c757d',
     error: '#dc3545',
     success: '#28a745',
+    warning: '#ffc107',
+    surface: '#ffffff',
+    border: '#dee2e6',
   },
   fonts: {
     main: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",

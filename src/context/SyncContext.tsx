@@ -5,6 +5,9 @@ import { oneDriveService } from '../services/onedrive.service';
 import { syncService } from '../services/sync.service';
 import type { SyncState, SyncSettings } from '../types/sync.types';
 import type { AccountInfo } from '@azure/msal-browser';
+import ConflictResolutionDialog from '../components/sync/ConflictResolutionDialog';
+import { useToast } from '../hooks/useToast';
+import { getUserFriendlyErrorMessage } from '../utils/errorMessages';
 
 interface SyncContextType {
   syncState: SyncState;
@@ -20,6 +23,7 @@ interface SyncContextType {
 const SyncContext = createContext<SyncContextType | undefined>(undefined);
 
 export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const toast = useToast();
   const [syncState, setSyncState] = useState<SyncState>({
     status: 'idle',
     lastSyncTime: null,
@@ -28,6 +32,12 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
     accountName: null,
     isSyncing: false,
   });
+  const [conflictData, setConflictData] = useState<{
+    localData: any;
+    localTimestamp: number;
+    remoteData: any;
+    remoteTimestamp: number;
+  } | null>(null);
 
   // Initialize sync service and check for existing session
   useEffect(() => {
@@ -95,18 +105,22 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isSyncing: false,
       }));
 
+      toast.success(`Connected to OneDrive as ${account.username}`);
+
       // Perform initial sync after sign-in
       await performSync();
     } catch (error) {
       console.error('Sign in failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Sign in failed';
       setSyncState((prev) => ({
         ...prev,
         status: 'error',
-        error: error instanceof Error ? error.message : 'Sign in failed',
+        error: errorMessage,
         isSyncing: false,
       }));
+      toast.error(`Failed to sign in: ${errorMessage}`);
     }
-  }, []);
+  }, [toast]);
 
   const signOut = useCallback(async () => {
     try {
@@ -145,28 +159,53 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isSyncing: false,
         }));
 
+        // Show success toast
+        const actionLabel = result.action === 'upload' ? 'uploaded to' :
+                           result.action === 'download' ? 'downloaded from' : 'synced with';
+        toast.success(`Data ${actionLabel} OneDrive`);
+
         // Reset to idle after 3 seconds
         setTimeout(() => {
           setSyncState((prev) => ({ ...prev, status: 'idle' }));
         }, 3000);
-      } else {
+      } else if (result.action === 'conflict' && result.conflictData) {
+        // Store conflict data and show dialog
+        setConflictData(result.conflictData);
         setSyncState((prev) => ({
           ...prev,
-          status: result.action === 'conflict' ? 'conflict' : 'error',
+          status: 'conflict',
+          error: result.error || 'Sync conflict detected',
+          isSyncing: false,
+        }));
+        toast.warning('Sync conflict detected. Please choose a version to keep.');
+      } else {
+        const friendlyMessage = getUserFriendlyErrorMessage(result.error || 'Sync failed');
+        setSyncState((prev) => ({
+          ...prev,
+          status: 'error',
           error: result.error || 'Sync failed',
           isSyncing: false,
         }));
+        toast.error(friendlyMessage, 7000, {
+          label: 'Retry',
+          onClick: () => performSync(),
+        });
       }
     } catch (error) {
       console.error('Sync failed:', error);
+      const friendlyMessage = getUserFriendlyErrorMessage(error);
       setSyncState((prev) => ({
         ...prev,
         status: 'error',
         error: error instanceof Error ? error.message : 'Sync failed',
         isSyncing: false,
       }));
+      toast.error(friendlyMessage, 7000, {
+        label: 'Retry',
+        onClick: () => performSync(),
+      });
     }
-  }, []);
+  }, [toast]);
 
   const forceUpload = useCallback(async () => {
     try {
@@ -257,6 +296,78 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return await syncService.getSettings();
   }, []);
 
+  const handleConflictResolve = useCallback(
+    async (action: 'keep-local' | 'download-remote') => {
+      if (!conflictData) return;
+
+      try {
+        setSyncState((prev) => ({ ...prev, isSyncing: true, status: 'syncing' }));
+
+        const result = await syncService.resolveConflict(action, conflictData);
+
+        if (result.success) {
+          const lastSyncTime = await syncService.getLastSyncTime();
+          setSyncState((prev) => ({
+            ...prev,
+            status: 'success',
+            lastSyncTime,
+            error: null,
+            isSyncing: false,
+          }));
+
+          // Clear conflict data
+          setConflictData(null);
+
+          // Show success toast
+          const actionLabel = action === 'keep-local' ? 'Local version uploaded' : 'Cloud version downloaded';
+          toast.success(`Conflict resolved: ${actionLabel}`);
+
+          // If downloaded remote, reload page to refresh decrypted data
+          if (action === 'download-remote') {
+            toast.info('Reloading to apply changes...', 2000);
+            setTimeout(() => {
+              window.location.reload();
+            }, 1000);
+          }
+
+          // Reset to idle after 3 seconds
+          setTimeout(() => {
+            setSyncState((prev) => ({ ...prev, status: 'idle' }));
+          }, 3000);
+        } else {
+          const errorMessage = result.error || 'Failed to resolve conflict';
+          setSyncState((prev) => ({
+            ...prev,
+            status: 'error',
+            error: errorMessage,
+            isSyncing: false,
+          }));
+          toast.error(errorMessage);
+        }
+      } catch (error) {
+        console.error('Conflict resolution failed:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to resolve conflict';
+        setSyncState((prev) => ({
+          ...prev,
+          status: 'error',
+          error: errorMessage,
+          isSyncing: false,
+        }));
+        toast.error(errorMessage);
+      }
+    },
+    [conflictData, toast]
+  );
+
+  const handleConflictCancel = useCallback(() => {
+    setConflictData(null);
+    setSyncState((prev) => ({
+      ...prev,
+      status: 'idle',
+      error: null,
+    }));
+  }, []);
+
   return (
     <SyncContext.Provider
       value={{
@@ -271,6 +382,16 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }}
     >
       {children}
+      {conflictData && (
+        <ConflictResolutionDialog
+          localTimestamp={conflictData.localTimestamp}
+          remoteTimestamp={conflictData.remoteTimestamp}
+          localData={conflictData.localData}
+          remoteData={conflictData.remoteData}
+          onResolve={handleConflictResolve}
+          onCancel={handleConflictCancel}
+        />
+      )}
     </SyncContext.Provider>
   );
 };

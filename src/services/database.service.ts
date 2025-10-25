@@ -3,6 +3,7 @@
 import { openDB } from 'idb';
 import type { DBSchema, IDBPDatabase } from 'idb';
 import type { EncryptedData } from '../types/data.types';
+import { saltRecoveryService } from './saltRecovery.service';
 
 interface LocktDB extends DBSchema {
   'encrypted-data': {
@@ -70,6 +71,11 @@ class DatabaseService {
   async setConfig(key: string, value: any): Promise<void> {
     await this.init();
     await this.db!.put('app-config', value, key);
+
+    // If saving salt, also backup to localStorage and OneDrive
+    if (key === 'salt' && typeof value === 'string') {
+      await saltRecoveryService.saveSaltBackups(value);
+    }
   }
 
   /**
@@ -87,6 +93,9 @@ class DatabaseService {
     await this.init();
     await this.db!.clear('encrypted-data');
     await this.db!.clear('app-config');
+
+    // Also clear salt backups
+    await saltRecoveryService.clearAllBackups();
   }
 
   /**
@@ -121,7 +130,7 @@ class DatabaseService {
   async importBackup(fileContent: string): Promise<void> {
     try {
       const importData = JSON.parse(fileContent);
-      
+
       // Validate structure
       if (!importData.iv || !importData.salt || !importData.ciphertext) {
         throw new Error('Invalid backup file format');
@@ -148,6 +157,52 @@ class DatabaseService {
       console.error('Import failed:', error);
       throw new Error('Failed to import backup - invalid file format');
     }
+  }
+
+  /**
+   * Attempt to recover salt from backup locations
+   * Used when IndexedDB salt is missing
+   */
+  async recoverSalt(): Promise<string | null> {
+    console.log('Attempting to recover salt from backups...');
+
+    // First check if salt exists in IndexedDB
+    const existingSalt = await this.getConfig('salt');
+    if (existingSalt) {
+      console.log('Salt found in IndexedDB, no recovery needed');
+      return existingSalt;
+    }
+
+    // Attempt recovery from backups
+    const recoveredSalt = await saltRecoveryService.recoverSalt();
+
+    if (recoveredSalt) {
+      // Restore to IndexedDB
+      await this.setConfig('salt', recoveredSalt);
+      console.log('Salt successfully recovered and restored to IndexedDB');
+      return recoveredSalt;
+    }
+
+    console.log('Salt recovery failed - no backups available');
+    return null;
+  }
+
+  /**
+   * Check salt backup status
+   */
+  async getSaltBackupStatus(): Promise<{
+    indexedDB: boolean;
+    localStorage: boolean;
+    oneDrive: boolean;
+  }> {
+    const indexedDBSalt = await this.getConfig('salt');
+    const backups = await saltRecoveryService.hasBackups();
+
+    return {
+      indexedDB: !!indexedDBSalt,
+      localStorage: backups.localStorage,
+      oneDrive: backups.oneDrive,
+    };
   }
 }
 

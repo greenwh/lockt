@@ -12,7 +12,7 @@ import PasswordDetail from './PasswordDetail';
 const PasswordList: React.FC = () => {
   const { appData, updatePasswords } = useAuth();
   const entries = appData?.passwords || [];
-  const [savedError, setSavedError] = useState<string | null>(null);
+  const [_savedError, setSavedError] = useState<string | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<PasswordEntry | null>(null);
   const [editingEntry, setEditingEntry] = useState<PasswordEntry | undefined>(undefined);
   const [isCreating, setIsCreating] = useState(false);

@@ -93,7 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
    * Unlock the app with master password
    */
   const unlock = useCallback(
-    async (pwd: string, recoveryPhrase?: string) => {
+    async (pwd: string, _recoveryPhrase?: string) => {
       try {
         setError(null);
 

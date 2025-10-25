@@ -12,7 +12,7 @@ import CreditCardDetail from './CreditCardDetail';
 const CreditCardList: React.FC = () => {
   const { appData, updateCreditCards } = useAuth();
   const entries = appData?.creditCards || [];
-  const [savedError, setSavedError] = useState<string | null>(null);
+  const [_savedError, setSavedError] = useState<string | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<CreditCardEntry | null>(null);
   const [editingEntry, setEditingEntry] = useState<CreditCardEntry | undefined>(undefined);
   const [isCreating, setIsCreating] = useState(false);

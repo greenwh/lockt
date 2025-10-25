@@ -15,6 +15,8 @@ export interface SyncResult {
   action: 'upload' | 'download' | 'conflict' | 'none';
   remoteData?: EncryptedData;
   remoteTimestamp?: number;
+  localData?: EncryptedData;
+  localTimestamp?: number;
 }
 
 class OneDriveService {
@@ -72,6 +74,13 @@ class OneDriveService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Get access token (public method for other services)
+   */
+  async getToken(): Promise<string> {
+    return this.getAccessToken();
   }
 
   /**
@@ -194,10 +203,12 @@ class OneDriveService {
 
   /**
    * Sync logic: Compare local and remote timestamps
+   * Detects conflicts when both local and remote have been modified since last sync
    */
   async sync(
     localData: EncryptedData | null,
-    localTimestamp: number
+    localTimestamp: number,
+    lastSyncTime?: number
   ): Promise<SyncResult> {
     const metadata = await this.getFileMetadata();
 
@@ -216,6 +227,24 @@ class OneDriveService {
         remoteData: remoteData!,
         remoteTimestamp,
       };
+    }
+
+    // Check for conflict: both modified since last sync
+    if (lastSyncTime) {
+      const localModifiedSinceSync = localTimestamp > lastSyncTime;
+      const remoteModifiedSinceSync = remoteTimestamp > lastSyncTime;
+
+      if (localModifiedSinceSync && remoteModifiedSinceSync) {
+        // CONFLICT: Both sides modified since last sync
+        const remoteData = await this.downloadData();
+        return {
+          action: 'conflict',
+          localData,
+          localTimestamp,
+          remoteData: remoteData!,
+          remoteTimestamp,
+        };
+      }
     }
 
     // Remote is newer - download
