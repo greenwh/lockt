@@ -8,9 +8,10 @@ import styled from 'styled-components';
 interface RecoveryFlowProps {
   onRecoveryComplete: () => void;
   onRecoveryFailed: () => void;
+  onStartFreshSetup: () => void;
 }
 
-const RecoveryFlow: React.FC<RecoveryFlowProps> = ({ onRecoveryComplete, onRecoveryFailed }) => {
+const RecoveryFlow: React.FC<RecoveryFlowProps> = ({ onRecoveryComplete, onRecoveryFailed, onStartFreshSetup }) => {
   const [status, setStatus] = useState<'checking' | 'found' | 'not-found' | 'recovering' | 'success' | 'failed'>('checking');
   const [backupStatus, setBackupStatus] = useState<{
     indexedDB: boolean;
@@ -59,9 +60,30 @@ const RecoveryFlow: React.FC<RecoveryFlowProps> = ({ onRecoveryComplete, onRecov
         return;
       }
 
+      // Recover salt
       const recoveredSalt = await databaseService.recoverSalt();
 
       if (recoveredSalt) {
+        console.log('RecoveryFlow: Salt recovered successfully');
+
+        // Also download encrypted data from OneDrive if signed in and no local data exists
+        const hasLocalData = await databaseService.hasEncryptedData();
+        if (!hasLocalData && oneDriveService.isSignedIn()) {
+          console.log('RecoveryFlow: No local data, downloading from OneDrive...');
+          try {
+            const downloadedData = await oneDriveService.downloadData();
+            if (downloadedData) {
+              console.log('RecoveryFlow: Encrypted data downloaded from OneDrive');
+              await databaseService.saveEncryptedData(downloadedData);
+            } else {
+              console.log('RecoveryFlow: No encrypted data found on OneDrive (user may need to sync first)');
+            }
+          } catch (downloadError) {
+            console.error('RecoveryFlow: Failed to download encrypted data:', downloadError);
+            // Don't fail recovery if encrypted data download fails - user can sync later
+          }
+        }
+
         setStatus('success');
         setTimeout(() => onRecoveryComplete(), 2000);
       } else {
@@ -79,8 +101,8 @@ const RecoveryFlow: React.FC<RecoveryFlowProps> = ({ onRecoveryComplete, onRecov
     try {
       await oneDriveService.signIn();
       setNeedsOneDriveSignIn(false);
-      // Retry recovery after sign-in
-      await attemptRecovery();
+      // Retry checking for backups after sign-in
+      await checkSaltStatus();
     } catch (error) {
       console.error('OneDrive sign-in failed:', error);
       setErrorMessage('Failed to sign in to OneDrive');
@@ -139,22 +161,40 @@ const RecoveryFlow: React.FC<RecoveryFlowProps> = ({ onRecoveryComplete, onRecov
       {status === 'not-found' && (
         <StatusSection>
           <StatusIcon>❌</StatusIcon>
-          <StatusText>No Recovery Backups Found</StatusText>
+          <StatusText>No Recovery Backups Found Locally</StatusText>
           <InfoText>
-            Your encryption key could not be recovered from any backup location.
-            This may happen if:
+            Your encryption key could not be recovered from browser storage.
+            {!oneDriveService.isSignedIn() && (
+              <> You can sign in to OneDrive to check for cloud backups.</>
+            )}
           </InfoText>
-          <ReasonList>
-            <li>This is your first time using Lockt on this device</li>
-            <li>Browser data was cleared completely</li>
-            <li>You haven't synced to OneDrive yet</li>
-          </ReasonList>
-          <ButtonGroup>
-            <RecoveryButton onClick={() => onRecoveryComplete()}>
-              Start Fresh Setup
-            </RecoveryButton>
-            <SecondaryButton onClick={handleReset}>Reset App</SecondaryButton>
-          </ButtonGroup>
+          {!oneDriveService.isSignedIn() ? (
+            <>
+              <ButtonGroup>
+                <RecoveryButton onClick={signInToOneDrive}>
+                  Sign in to OneDrive
+                </RecoveryButton>
+                <SecondaryButton onClick={onStartFreshSetup}>
+                  Start Fresh Setup
+                </SecondaryButton>
+              </ButtonGroup>
+            </>
+          ) : (
+            <>
+              <InfoText>No backups found in OneDrive either. This may happen if:</InfoText>
+              <ReasonList>
+                <li>This is your first time using Lockt</li>
+                <li>You haven't synced from another device yet</li>
+                <li>Browser data was cleared completely</li>
+              </ReasonList>
+              <ButtonGroup>
+                <RecoveryButton onClick={onStartFreshSetup}>
+                  Start Fresh Setup
+                </RecoveryButton>
+                <SecondaryButton onClick={handleReset}>Reset App</SecondaryButton>
+              </ButtonGroup>
+            </>
+          )}
         </StatusSection>
       )}
 

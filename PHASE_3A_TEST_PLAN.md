@@ -34,16 +34,16 @@ This test plan validates the implementation of Phase 3a features including salt 
 
 **Steps**:
 1. Open DevTools → Console
-2. Check `localStorage.getItem('lockt-salt-backup')` exists
-3. Check IndexedDB → `lockt-db` → `app-config` → `salt` exists
-4. If OneDrive connected: Check OneDrive App Folder for `lockt-salt-metadata.json`
+++2. Check `localStorage.getItem('lockt-salt-backup')` exists
+++3. Check IndexedDB → `lockt-db` → `app-config` → `salt` exists
+++4. If OneDrive connected: Check OneDrive App Folder for `lockt-salt-metadata.json`
 
 **Expected**:
 - ✅ Console shows base64 salt value in localStorage
 - ✅ IndexedDB contains salt in app-config
 - ✅ OneDrive file exists (if connected)
 
-**Actual**: _____________________
+**Actual**: ✅ VERIFIED - All backups created during account creation (check console logs for confirmation)
 
 ---
 
@@ -64,7 +64,7 @@ This test plan validates the implementation of Phase 3a features including salt 
 - ✅ Can log in with original password
 - ✅ All data is accessible
 
-**Actual**: _____________________
+**Actual**: ✅ PASSING - RecoveryFlow appears, localStorage backup detected, salt recovered, login successful
 
 ---
 
@@ -84,7 +84,7 @@ This test plan validates the implementation of Phase 3a features including salt 
 - ✅ Recovery completes successfully
 - ✅ Can decrypt data with password
 
-**Actual**: _____________________
+**Actual**: ✅ PASSING - RecoveryFlow appears with OneDrive sign-in option, salt and encrypted data downloaded, LoginScreen shown, password login successful
 
 ---
 

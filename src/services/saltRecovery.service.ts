@@ -20,12 +20,18 @@ class SaltRecoveryService {
    */
   async saveSaltBackups(salt: string): Promise<void> {
     try {
+      console.log('saltRecoveryService: Starting salt backups...');
+
       // 1. Save to localStorage (survives IndexedDB deletion)
       this.saveToLocalStorage(salt);
+      console.log('saltRecoveryService: localStorage backup complete');
 
       // 2. Save to OneDrive (if connected)
       if (oneDriveService.isSignedIn()) {
+        console.log('saltRecoveryService: OneDrive is signed in, saving backup...');
         await this.saveToOneDrive(salt);
+      } else {
+        console.log('saltRecoveryService: OneDrive not signed in, skipping cloud backup');
       }
     } catch (error) {
       console.error('Failed to save salt backups:', error);
