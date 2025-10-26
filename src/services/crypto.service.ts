@@ -1,6 +1,7 @@
 // src/services/crypto.service.ts
 
 import type { EncryptedData, RecoveryPhrase } from '../types/data.types';
+import { BIP39_WORDLIST } from '../utils/bip39-wordlist';
 
 /**
  * Cryptography Service
@@ -205,24 +206,16 @@ class CryptoService {
 
   /**
    * Generate a 12-word recovery phrase
-   * Uses a simplified wordlist approach
+   * Uses official BIP39 wordlist (2048 words)
    */
   async generateRecoveryPhrase(): Promise<RecoveryPhrase> {
-    // BIP39-style word list (simplified - in production use full BIP39 list)
-    const wordList = [
-      'abandon', 'ability', 'able', 'about', 'above', 'absent', 'absorb', 'abstract',
-      'absurd', 'abuse', 'access', 'accident', 'account', 'accuse', 'achieve', 'acid',
-      // ... (include full 2048-word BIP39 list in production)
-      'zone', 'zoo'
-    ];
-
     const words: string[] = [];
     const randomValues = new Uint32Array(12);
     crypto.getRandomValues(randomValues);
 
     for (let i = 0; i < 12; i++) {
-      const index = randomValues[i] % wordList.length;
-      words.push(wordList[index]);
+      const index = randomValues[i] % BIP39_WORDLIST.length;
+      words.push(BIP39_WORDLIST[index]);
     }
 
     // Generate checksum (simple hash of words)
