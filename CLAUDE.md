@@ -9,8 +9,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Current Status**:
 - ✅ **Phase 1-2**: Complete (encryption, data entry, UI)
 - ✅ **Phase 3**: Complete (OneDrive sync with MSAL, multi-device sync working)
-- ⚠️ **Phase 3a**: Planned (sync reliability, recovery, settings UI)
+- 🟢 **Phase 3a**: Partially Complete (Oct 2025 bug fixes - see below)
 - 📅 **Phase 4+**: Biometric auth, export, polish
+
+**Recent Updates (October 25, 2025)**:
+Critical bug fixes completing most of Phase 3a:
+- ✅ Recovery phrase generation (full BIP39 wordlist - 2048 words)
+- ✅ Recovery phrase login support (UI toggle on login screen)
+- ✅ Conflict resolution fixed (no more page reload → setup screen)
+- ✅ UI auto-refresh after sync (reloadFromDatabase pattern)
+- ✅ Seamless state updates (AuthContext.reloadFromDatabase method)
 
 See `PHASE_ROADMAP.md` for complete phase status and timeline.
 
@@ -120,6 +128,7 @@ Storage (IndexedDB local, OneDrive cloud)
   - Health data: `HealthProvider`, `HealthCondition`, `HealthImpairment`, `HealthJournalEntry`
 
 **Context**
+- `src/context/AuthContext.tsx` - Authentication state, unlock/lock, data mutations, and `reloadFromDatabase()` method
 - `src/context/SyncContext.tsx` - Global state for sync status, account info, and sync operations
 
 **Components**
@@ -199,6 +208,40 @@ const newEncryptedData = await cryptoService.encrypt(
 // 5. Save back to IndexedDB
 await databaseService.saveEncryptedData(newEncryptedData);
 ```
+
+### Refreshing UI After Sync Operations
+
+**Pattern: `reloadFromDatabase()` for Seamless State Updates**
+
+After sync operations that modify IndexedDB (downloads, conflict resolution), the UI must be refreshed without requiring a full page reload. The `AuthContext.reloadFromDatabase()` method handles this:
+
+```typescript
+// In SyncContext after downloading data from OneDrive
+if (result.action === 'download') {
+  try {
+    await reloadFromDatabase(); // Decrypts latest IndexedDB data into memory
+    console.log('UI refreshed after download');
+  } catch (err) {
+    console.error('Failed to reload data:', err);
+    toast.warning('Data synced but UI refresh failed. Please restart the app.');
+  }
+}
+```
+
+**Key Benefits:**
+- No page reload required (avoids losing unlocked state)
+- Uses stored password from AuthContext to decrypt updated data
+- Updates in-memory state immediately
+- Prevents "setup screen" bug after conflict resolution
+
+**When to Use:**
+- After downloading data from OneDrive (sync, force download)
+- After conflict resolution with "download-remote" action
+- Any time IndexedDB is updated externally (not through AuthContext update methods)
+
+**Files Involved:**
+- `src/context/AuthContext.tsx:164-190` - `reloadFromDatabase()` implementation
+- `src/context/SyncContext.tsx` - Integration into sync workflows
 
 ### Testing OneDrive Sync
 
@@ -310,22 +353,38 @@ await databaseService.saveEncryptedData(newEncryptedData);
 - **Browser Extension** - Auto-fill support
 - **Dark Mode** - Theme toggle
 
-## Known Limitations (Before Phase 3a)
+## Known Limitations & Fixes
 
+### ✅ Fixed (October 2025)
+1. ~~**Recovery Phrase Issues**~~ - Now uses full BIP39 wordlist (2048 words), no duplicates
+2. ~~**Conflict Resolution Bug**~~ - No longer sends to setup screen after choosing cloud version
+3. ~~**UI Refresh After Sync**~~ - Data updates immediately via `reloadFromDatabase()` pattern
+4. ~~**Recovery Phrase Login**~~ - Toggle on login screen allows recovery phrase authentication
+
+### ⚠️ Remaining Limitations
 1. **No Salt Recovery** - If IndexedDB deleted, encrypted data on OneDrive can't be recovered
-2. **Silent Conflict Resolution** - Sync auto-resolves conflicts to "most recent" without user choice
-3. **No Sync Settings UI** - Users can't control auto-sync or conflict resolution strategy
-4. **Limited Status Feedback** - No visible sync status or last sync time in UI
-5. **Basic Error Handling** - Failed syncs don't retry automatically
+2. **No Sync Settings UI** - Users can't configure auto-sync frequency or Wi-Fi-only mode
+3. **Limited Status Feedback** - Last sync time not prominently displayed in UI
+4. **Retry Logic** - Failed syncs have exponential backoff but no manual retry button
 
-See `PHASE_3A.md` for detailed plans to address these in Phase 3a.
+### 🛠️ Device-Specific Issues
+- **iPhone PWA MSAL Cache** - Some devices may experience OneDrive sign-in crash due to corrupted MSAL cache
+  - **Solution**: Clear Safari website data, reinstall PWA, or clear localStorage manually
+
+See `PHASE_3A.md` for detailed plans to address remaining limitations.
 
 ## Documentation
 
+- `README.md` - Project overview and quick start guide
+- `USER_GUIDE.md` - End-user documentation for using the app
+- `CLAUDE.md` - This file - developer guide for AI assistants
 - `PHASE_ROADMAP.md` - Visual timeline and status of all phases
 - `PHASE_3A.md` - Complete specification for Phase 3a (10 tasks)
 - `PHASE_3A_SUMMARY.md` - Quick reference for Phase 3a implementation
 - `lockt-tech-spec-v4.md` - Complete technical specification (types, services, architecture)
+
+**Key Utilities:**
+- `src/utils/bip39-wordlist.ts` - Official BIP39 English wordlist (2048 words) for recovery phrases
 
 ## Notes for Future Sessions
 
