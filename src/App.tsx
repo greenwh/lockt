@@ -10,6 +10,7 @@ import CreditCardList from './components/credit-cards/CreditCardList';
 import CryptoList from './components/crypto/CryptoList';
 import FreetextList from './components/freetext/FreetextList';
 import HealthTabs from './components/health/HealthTabs';
+import SettingsScreen from './components/settings/SettingsScreen';
 import LoginScreen from './components/auth/LoginScreen';
 import SetupScreen from './components/auth/SetupScreen';
 import RecoveryFlow from './components/auth/RecoveryFlow';
@@ -126,6 +127,8 @@ const App: React.FC = () => {
         return <FreetextList />;
       case 'health':
         return <HealthTabs />;
+      case 'settings':
+        return <SettingsScreen />;
       default:
         return <PasswordList />;
     }

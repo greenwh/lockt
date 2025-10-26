@@ -21,12 +21,14 @@ interface AuthContextType {
   isLocked: boolean;
   appData: AppData | null;
   error: string | null;
+  unlockedViaRecovery: boolean; // Track if unlocked via recovery phrase
 
   // Actions
   unlock: (password: string, recoveryPhrase?: string) => Promise<void>;
   lock: () => Promise<void>;
   createAccount: (password: string, recoveryPhrase: string) => Promise<void>;
   reloadFromDatabase: () => Promise<void>; // Reload data from IndexedDB after sync
+  changePassword: (currentPassword: string | null, newPassword: string, recoveryPhrase: string) => Promise<void>;
 
   // Data mutations (these auto-save to IndexedDB)
   updatePasswords: (entries: PasswordEntry[]) => Promise<void>;
@@ -43,6 +45,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [appData, setAppData] = useState<AppData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [password, setPassword] = useState<string | null>(null); // Keep password in memory while unlocked
+  const [unlockedViaRecovery, setUnlockedViaRecovery] = useState(false); // Track unlock method
 
   // Initialize: Check if app has been set up
   useEffect(() => {
@@ -100,7 +103,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setError(null);
 
         // Determine unlock mode
-        const isRecoveryMode = !pwd && recoveryPhrase;
+        const isRecoveryMode = !pwd && !!recoveryPhrase;
         let actualPassword = pwd;
 
         // If using recovery phrase only, decrypt the password first
@@ -156,6 +159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         setAppData(data);
         setPassword(actualPassword); // Store password for re-encryption on data changes
+        setUnlockedViaRecovery(isRecoveryMode); // Track unlock method
         setIsLocked(false);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unlock failed';
@@ -172,6 +176,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const lock = useCallback(async () => {
     setAppData(null);
     setPassword(null); // Clear password from memory
+    setUnlockedViaRecovery(false); // Reset unlock method
     setIsLocked(true);
     setError(null);
   }, []);
@@ -280,6 +285,93 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   /**
+   * Change password (re-encrypt all data with new password)
+   * Requires recovery phrase to re-encrypt new password for future recovery
+   */
+  const changePassword = useCallback(
+    async (currentPassword: string | null, newPassword: string, recoveryPhrase: string) => {
+      try {
+        setError(null);
+
+        if (!appData || isLocked) {
+          throw new Error('App is locked or no data loaded');
+        }
+
+        // Validate recovery phrase format
+        if (!cryptoService.validateRecoveryPhrase(recoveryPhrase)) {
+          throw new Error('Invalid recovery phrase (must be 12 words)');
+        }
+
+        // Determine actual current password
+        let actualCurrentPassword: string;
+
+        if (unlockedViaRecovery) {
+          // User unlocked via recovery phrase, so use stored password
+          if (!password) {
+            throw new Error('Cannot change password: no stored password found');
+          }
+          actualCurrentPassword = password;
+          console.log('ChangePassword: Using stored password (unlocked via recovery)');
+        } else {
+          // User unlocked normally, verify they provided current password
+          if (!currentPassword) {
+            throw new Error('Current password is required');
+          }
+          actualCurrentPassword = currentPassword;
+
+          // Verify current password is correct by decrypting data
+          const encryptedData = await databaseService.getEncryptedData();
+          if (!encryptedData) {
+            throw new Error('No encrypted data found');
+          }
+          await cryptoService.decrypt(encryptedData, currentPassword);
+          console.log('ChangePassword: Current password verified');
+        }
+
+        // Verify recovery phrase is correct by checking against stored encrypted password
+        const storedEncryptedPassword = await databaseService.getConfig('encryptedPassword');
+        if (storedEncryptedPassword) {
+          const decryptedPassword = await cryptoService.decryptPasswordWithRecoveryPhrase(
+            storedEncryptedPassword,
+            recoveryPhrase
+          );
+          if (decryptedPassword !== actualCurrentPassword) {
+            throw new Error('Recovery phrase is incorrect');
+          }
+          console.log('ChangePassword: Recovery phrase verified');
+        }
+
+        // Re-encrypt data with new password (generate new salt for extra security)
+        const newSalt = crypto.getRandomValues(new Uint8Array(16));
+        const dataJson = JSON.stringify(appData);
+        const newEncryptedData = await cryptoService.encrypt(dataJson, newPassword, newSalt);
+
+        // Encrypt NEW password with same recovery phrase
+        const newEncryptedPassword = await cryptoService.encryptPasswordWithRecoveryPhrase(
+          newPassword,
+          recoveryPhrase
+        );
+
+        // Save everything to database
+        await databaseService.saveEncryptedData(newEncryptedData);
+        await databaseService.setConfig('salt', newEncryptedData.salt);
+        await databaseService.setConfig('encryptedPassword', newEncryptedPassword);
+        await databaseService.setConfig('lastModified', Date.now());
+
+        // Update in-memory password
+        setPassword(newPassword);
+
+        console.log('ChangePassword: Password changed successfully');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Password change failed';
+        setError(message);
+        throw err;
+      }
+    },
+    [appData, isLocked, password, unlockedViaRecovery]
+  );
+
+  /**
    * Helper to update AppData and save to database
    */
   const updateAppData = useCallback(
@@ -378,10 +470,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLocked,
         appData,
         error,
+        unlockedViaRecovery,
         unlock,
         lock,
         createAccount,
         reloadFromDatabase,
+        changePassword,
         updatePasswords,
         updateCreditCards,
         updateCrypto,

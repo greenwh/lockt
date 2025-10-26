@@ -2,7 +2,7 @@
 import React from 'react';
 import { NavTabsContainer, NavTabButton } from './TabNavigation.styled';
 
-export type Tab = 'passwords' | 'credit-cards' | 'crypto' | 'freetext' | 'health';
+export type Tab = 'passwords' | 'credit-cards' | 'crypto' | 'freetext' | 'health' | 'settings';
 
 interface TabNavigationProps {
   activeTab: Tab;
@@ -15,6 +15,7 @@ const tabs: { id: Tab; label: string }[] = [
   { id: 'crypto', label: 'Crypto' },
   { id: 'freetext', label: 'Freetext' },
   { id: 'health', label: 'Health' },
+  { id: 'settings', label: 'Settings' },
 ];
 
 const TabNavigation: React.FC<TabNavigationProps> = ({ activeTab, onTabClick }) => {
