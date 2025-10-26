@@ -18,17 +18,15 @@ const LoginScreen: React.FC = () => {
     e.preventDefault();
 
     if (useRecovery) {
-      // Validate recovery phrase (should be 12 words)
+      // Recovery mode: recovery phrase is required, password is optional
       const words = recoveryPhrase.trim().toLowerCase().split(/\s+/);
       if (words.length !== 12) {
         setLocalError('Recovery phrase must be exactly 12 words');
         return;
       }
-      if (!password.trim()) {
-        setLocalError('Password is still required when using recovery phrase');
-        return;
-      }
+      // Password is optional in recovery mode - recovery phrase will decrypt it
     } else {
+      // Normal mode: password is required
       if (!password.trim()) {
         setLocalError('Password is required');
         return;
@@ -38,7 +36,14 @@ const LoginScreen: React.FC = () => {
     try {
       setIsLoading(true);
       setLocalError(null);
-      await unlock(password, useRecovery ? recoveryPhrase.trim().toLowerCase() : undefined);
+
+      if (useRecovery) {
+        // Recovery mode: Pass empty password and recovery phrase
+        await unlock('', recoveryPhrase.trim().toLowerCase());
+      } else {
+        // Normal mode: Pass password only
+        await unlock(password, undefined);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unlock failed';
       setLocalError(message);
@@ -51,20 +56,22 @@ const LoginScreen: React.FC = () => {
     <Container>
       <Title>Unlock Lockt</Title>
       <Form onSubmit={handleUnlock}>
-        <Input
-          label="Master Password"
-          id="password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.currentTarget.value)}
-          error={localError || error || undefined}
-          placeholder="Enter your master password"
-          disabled={isLoading}
-        />
+        {!useRecovery && (
+          <Input
+            label="Master Password"
+            id="password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.currentTarget.value)}
+            error={localError || error || undefined}
+            placeholder="Enter your master password"
+            disabled={isLoading}
+          />
+        )}
 
         <ToggleContainer>
           <ToggleButton type="button" onClick={() => setUseRecovery(!useRecovery)}>
-            {useRecovery ? '🔑 Use password only' : '🔐 Use recovery phrase'}
+            {useRecovery ? '🔑 Use password instead' : '🔐 Forgot password? Use recovery phrase'}
           </ToggleButton>
         </ToggleContainer>
 
@@ -77,15 +84,16 @@ const LoginScreen: React.FC = () => {
               placeholder="Enter your 12-word recovery phrase (space-separated)"
               disabled={isLoading}
               rows={3}
+              autoFocus
             />
             <HelpText>
-              Enter all 12 words from your recovery phrase, separated by spaces. The recovery phrase works together with your password to unlock your account.
+              ✅ <strong>Enter only your recovery phrase</strong> - you don't need your password! The recovery phrase will decrypt your password automatically.
             </HelpText>
           </RecoveryPhraseContainer>
         )}
 
         <Button type="submit" disabled={isLoading} style={{ width: '100%', marginTop: '20px' }}>
-          {isLoading ? 'Unlocking...' : 'Unlock'}
+          {isLoading ? 'Unlocking...' : useRecovery ? 'Recover & Unlock' : 'Unlock'}
         </Button>
       </Form>
       {(localError || error) && (

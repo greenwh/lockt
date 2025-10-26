@@ -242,6 +242,33 @@ class CryptoService {
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
     return this.arrayBufferToBase64(hashBuffer);
   }
+
+  /**
+   * Encrypt password using recovery phrase (password escrow)
+   * This allows recovery phrase to decrypt the password, which can then unlock data
+   */
+  async encryptPasswordWithRecoveryPhrase(
+    password: string,
+    recoveryPhrase: string
+  ): Promise<EncryptedData> {
+    // Use recovery phrase as the password for encryption
+    // Generate new salt for this encryption (don't reuse data salt)
+    const escrowSalt = this.generateSalt();
+
+    // Encrypt the password using recovery phrase
+    return await this.encrypt(password, recoveryPhrase, escrowSalt);
+  }
+
+  /**
+   * Decrypt password using recovery phrase (password recovery)
+   */
+  async decryptPasswordWithRecoveryPhrase(
+    encryptedPassword: EncryptedData,
+    recoveryPhrase: string
+  ): Promise<string> {
+    // Decrypt the password using recovery phrase
+    return await this.decrypt(encryptedPassword, recoveryPhrase);
+  }
 }
 
 export const cryptoService = new CryptoService();
