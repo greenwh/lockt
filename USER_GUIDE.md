@@ -9,12 +9,13 @@ Welcome to **Lockt** - your secure, personal data vault! This guide will help yo
 3. [First Time Setup](#first-time-setup)
 4. [Unlocking Lockt](#unlocking-lockt)
 5. [Using Data Categories](#using-data-categories)
-6. [OneDrive Sync](#onedrive-sync)
-7. [Multi-Device Usage](#multi-device-usage)
-8. [Recovery & Backup](#recovery--backup)
-9. [Security Best Practices](#security-best-practices)
-10. [Troubleshooting](#troubleshooting)
-11. [FAQ](#faq)
+6. [Security Settings](#security-settings)
+7. [OneDrive Sync](#onedrive-sync)
+8. [Multi-Device Usage](#multi-device-usage)
+9. [Recovery & Backup](#recovery--backup)
+10. [Security Best Practices](#security-best-practices)
+11. [Troubleshooting](#troubleshooting)
+12. [FAQ](#faq)
 
 ---
 
@@ -244,6 +245,61 @@ Track medical information across 4 sub-categories:
    - Pain level (1-10 scale)
    - Symptoms
    - Notes
+
+---
+
+## Security Settings
+
+The Settings screen provides security options to manage your account.
+
+### Changing Your Password
+
+You can change your master password at any time from the Settings tab.
+
+**Why Change Your Password?**
+- You suspect your password may have been compromised
+- You want to use a stronger password
+- You want to rotate credentials for security best practices
+
+**How to Change Your Password:**
+1. Unlock Lockt with your current password or recovery phrase
+2. Tap "Settings" in the navigation
+3. Fill out the password change form:
+   - **Current Password** (only if you unlocked with password)
+     - If you unlocked using your recovery phrase, this field is hidden
+   - **New Password** (minimum 8 characters)
+   - **Confirm New Password** (must match)
+   - **Recovery Phrase** (your 12-word phrase)
+4. Tap "Change Password"
+
+**Important Security Notes:**
+
+⚠️ **Recovery Phrase Required**
+- Your recovery phrase is required to change your password
+- This verifies you still have access to your recovery phrase
+- Your recovery phrase stays the same after changing password
+- Keep your recovery phrase safe - you'll need it to recover your new password
+
+🔐 **What Happens When You Change Your Password:**
+- All your data is re-encrypted with the new password
+- Your new password is encrypted with your recovery phrase
+- Your recovery phrase remains unchanged
+- You can still recover your new password using the same recovery phrase
+
+✅ **After Changing Your Password:**
+- You'll stay logged in (no need to unlock again)
+- Use your new password for all future logins
+- Your recovery phrase can still recover your new password
+- OneDrive sync continues automatically with re-encrypted data
+
+**Unlocked Via Recovery Phrase?**
+
+If you unlocked Lockt using your recovery phrase (because you forgot your password), the password change process is simplified:
+- Current password field is hidden (you don't know it anyway!)
+- You only need to enter:
+  - New password
+  - Confirm new password
+  - Recovery phrase (to verify you still have it)
 
 ---
 
