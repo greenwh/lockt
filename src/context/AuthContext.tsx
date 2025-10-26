@@ -92,12 +92,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   /**
-   * Unlock the app with master password
+   * Unlock the app with master password OR recovery phrase
    */
   const unlock = useCallback(
-    async (pwd: string, _recoveryPhrase?: string) => {
+    async (pwd: string, recoveryPhrase?: string) => {
       try {
         setError(null);
+
+        // Determine unlock mode
+        const isRecoveryMode = !pwd && recoveryPhrase;
+        let actualPassword = pwd;
+
+        // If using recovery phrase only, decrypt the password first
+        if (isRecoveryMode && recoveryPhrase) {
+          console.log('AuthContext: Recovery mode - decrypting password with recovery phrase');
+
+          const encryptedPassword = await databaseService.getConfig('encryptedPassword');
+          if (!encryptedPassword) {
+            throw new Error('No encrypted password found. This account may not support recovery phrase unlock.');
+          }
+
+          // Decrypt password using recovery phrase
+          actualPassword = await cryptoService.decryptPasswordWithRecoveryPhrase(
+            encryptedPassword,
+            recoveryPhrase
+          );
+          console.log('AuthContext: Password recovered successfully');
+        }
 
         // Get encrypted data (includes salt)
         let encryptedData = await databaseService.getEncryptedData();
@@ -126,17 +147,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
-        // Decrypt (salt is already in encryptedData)
-        // Try with just password first, recovery phrase is optional
+        // Decrypt with actual password (either provided directly or recovered from recovery phrase)
         const decryptedJson = await cryptoService.decrypt(
           encryptedData,
-          pwd
-          // Optional: recoveryPhrase can be passed for backup recovery
+          actualPassword
         );
         const data: AppData = JSON.parse(decryptedJson);
 
         setAppData(data);
-        setPassword(pwd); // Store password for re-encryption on data changes
+        setPassword(actualPassword); // Store password for re-encryption on data changes
         setIsLocked(false);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unlock failed';
@@ -232,11 +251,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Don't pass recovery phrase on initial setup - just use password
         );
 
+        // IMPORTANT: Encrypt password with recovery phrase (password escrow)
+        // This allows recovery phrase to recover the password if user forgets it
+        const encryptedPassword = await cryptoService.encryptPasswordWithRecoveryPhrase(
+          password,
+          recoveryPhrase
+        );
+
         // Save to database
         await databaseService.saveEncryptedData(encryptedData);
         // Extract salt from encryptedData and save separately
         await databaseService.setConfig('salt', encryptedData.salt);
         await databaseService.setConfig('deviceId', deviceId);
+        // Store encrypted password for recovery
+        await databaseService.setConfig('encryptedPassword', encryptedPassword);
 
         // Unlock the app
         setAppData(initialData);
