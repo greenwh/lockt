@@ -128,16 +128,17 @@ Every time you open Lockt, you'll need to unlock it:
 1. Enter your master password
 2. Tap "Unlock"
 
-### Recovery Phrase Unlock
+### Recovery Phrase Unlock (Password Recovery)
 
 If you forgot your password but have your recovery phrase:
 
-1. Tap "🔐 Use recovery phrase"
-2. Enter your master password (yes, you still need it!)
+1. Tap "🔐 Forgot password? Use recovery phrase"
+2. The password field disappears (you don't need it!)
 3. Enter your 12-word recovery phrase in the text box
-4. Tap "Unlock"
+4. Tap "Recover & Unlock"
+5. Your password is automatically decrypted and you're unlocked!
 
-**Note:** Recovery phrase + password together unlock your account. The recovery phrase alone is not enough.
+**How It Works:** During account setup, your password is encrypted using your recovery phrase. When you use recovery mode, the recovery phrase decrypts your password, then your password unlocks your data. It's like having a backup key!
 
 ---
 
@@ -539,13 +540,13 @@ A: Yes. Once you've unlocked Lockt, you can view and edit your data without inte
 A: AES-GCM (256-bit keys) with PBKDF2 key derivation (600,000 iterations). This is industry-standard, bank-level encryption.
 
 **Q: What happens if I forget my password?**
-A: If you have your recovery phrase, you can use it to unlock your account. If you lost both password and recovery phrase, your data is permanently unrecoverable. This is the security tradeoff for zero-knowledge encryption.
+A: If you have your recovery phrase, you can use it ALONE to recover your password and unlock your account. The recovery phrase decrypts an encrypted copy of your password stored in Lockt. If you lost both password and recovery phrase, your data is permanently unrecoverable.
 
 **Q: Can Lockt recover my password for me?**
-A: No. There is no password reset feature. Your password never leaves your device, and no one (including Lockt developers) can recover it.
+A: No. There is no password reset feature. Your password is encrypted with your recovery phrase and stored locally. Only YOU can decrypt it with your recovery phrase. No one (including Lockt developers or Microsoft) can recover it for you.
 
 **Q: Is my recovery phrase the same as my password?**
-A: No. Your recovery phrase is a 12-word backup that works WITH your password. You need both to unlock your account (password alone works, or password + recovery phrase).
+A: No. Your recovery phrase is a 12-word backup key that can decrypt your password. During account creation, Lockt encrypts your password using your recovery phrase. If you forget your password, enter your recovery phrase and Lockt will automatically decrypt and use your password to unlock your data.
 
 **Q: How secure is the 12-word recovery phrase?**
 A: Extremely secure. There are 2048^12 possible combinations (~5.4 × 10^39), which is more secure than most 256-bit encryption keys.
@@ -641,20 +642,31 @@ Have an idea? We'd love to hear it!
 
 ## Version History
 
-### October 25, 2025 - Phase 3a Partial Release
+### October 25, 2025 - Phase 3a Partial Release (v2)
+
+**Critical Fix:**
+- ✅ **Recovery phrase now works correctly as password replacement!**
+  - Previously required BOTH password + recovery phrase (wrong!)
+  - Now recovery phrase ALONE can unlock account (correct!)
+  - Password is encrypted with recovery phrase during account setup (password escrow)
+  - Recovery mode decrypts password automatically
 
 **New Features:**
 - ✅ Recovery phrase login on unlock screen (toggle button)
 - ✅ Full BIP39 wordlist for recovery phrase generation (2048 words)
+- ✅ Password escrow system (encrypt password with recovery phrase)
 
 **Bug Fixes:**
 - ✅ Fixed: Conflict resolution no longer sends to setup screen
 - ✅ Fixed: UI now refreshes automatically after sync (no restart needed)
 - ✅ Fixed: Recovery phrases no longer have duplicate words or all "A" words
+- ✅ Fixed: Recovery phrase implementation (no longer requires password)
 
 **Technical Improvements:**
 - ✅ Added `reloadFromDatabase()` method for seamless state updates
+- ✅ Added `encryptPasswordWithRecoveryPhrase()` and `decryptPasswordWithRecoveryPhrase()` methods
 - ✅ Improved error handling for OneDrive sync failures
+- ✅ Updated unlock flow to support recovery-only mode
 
 ### Previous Releases
 
