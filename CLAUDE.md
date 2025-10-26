@@ -13,12 +13,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 📅 **Phase 4+**: Biometric auth, export, polish
 
 **Recent Updates (October 25, 2025)**:
-Critical bug fixes completing most of Phase 3a:
+Critical bug fixes and security features completing most of Phase 3a:
 - ✅ Recovery phrase generation (full BIP39 wordlist - 2048 words)
 - ✅ Recovery phrase login support (UI toggle on login screen)
 - ✅ Conflict resolution fixed (no more page reload → setup screen)
 - ✅ UI auto-refresh after sync (reloadFromDatabase pattern)
 - ✅ Seamless state updates (AuthContext.reloadFromDatabase method)
+- ✅ Password change feature (Settings tab with recovery phrase verification)
 
 See `PHASE_ROADMAP.md` for complete phase status and timeline.
 
@@ -243,6 +244,100 @@ if (result.action === 'download') {
 - `src/context/AuthContext.tsx:164-190` - `reloadFromDatabase()` implementation
 - `src/context/SyncContext.tsx` - Integration into sync workflows
 
+### Changing Password
+
+**Pattern: Password Change with Recovery Phrase Verification**
+
+The password change feature allows users to update their master password while maintaining the same recovery phrase. This is critical for security if a password is compromised.
+
+**Technical Flow:**
+```typescript
+// In AuthContext.changePassword()
+const changePassword = async (
+  currentPassword: string | null,
+  newPassword: string,
+  recoveryPhrase: string
+) => {
+  // 1. Determine actual current password
+  let actualCurrentPassword: string;
+  if (unlockedViaRecovery) {
+    // User unlocked with recovery phrase - use stored password
+    actualCurrentPassword = password; // from AuthContext state
+  } else {
+    // User unlocked normally - verify provided current password
+    actualCurrentPassword = currentPassword;
+    await cryptoService.decrypt(encryptedData, currentPassword); // Throws if wrong
+  }
+
+  // 2. Verify recovery phrase is correct
+  const storedEncryptedPassword = await databaseService.getConfig('encryptedPassword');
+  const decryptedPassword = await cryptoService.decryptPasswordWithRecoveryPhrase(
+    storedEncryptedPassword,
+    recoveryPhrase
+  );
+  if (decryptedPassword !== actualCurrentPassword) {
+    throw new Error('Recovery phrase is incorrect');
+  }
+
+  // 3. Re-encrypt all data with new password (and new salt for forward secrecy)
+  const newSalt = crypto.getRandomValues(new Uint8Array(16));
+  const newEncryptedData = await cryptoService.encrypt(
+    JSON.stringify(appData),
+    newPassword,
+    newSalt
+  );
+
+  // 4. Encrypt new password with same recovery phrase
+  const newEncryptedPassword = await cryptoService.encryptPasswordWithRecoveryPhrase(
+    newPassword,
+    recoveryPhrase
+  );
+
+  // 5. Save everything to IndexedDB
+  await databaseService.saveEncryptedData(newEncryptedData);
+  await databaseService.setConfig('salt', newEncryptedData.salt);
+  await databaseService.setConfig('encryptedPassword', newEncryptedPassword);
+
+  // 6. Update in-memory password (stay unlocked)
+  setPassword(newPassword);
+};
+```
+
+**Key Design Decisions:**
+
+1. **Same Recovery Phrase**: Recovery phrase remains unchanged when password changes
+   - Simpler UX (only one recovery phrase to remember)
+   - Recovery phrase can still decrypt new password
+   - New password is encrypted with same recovery phrase
+
+2. **Conditional Current Password**: Skip verification if unlocked via recovery
+   - If user unlocked with recovery phrase, they don't know their current password
+   - Use stored password from AuthContext state instead
+   - UI hides current password field in this case
+
+3. **Recovery Phrase Verification Required**:
+   - Ensures user still has access to recovery phrase
+   - Prevents unauthorized password changes
+   - Verified by decrypting stored encrypted password
+
+4. **Forward Secrecy**: New salt generated when changing password
+   - Extra security layer
+   - Old encrypted data cannot be correlated with new
+
+5. **Stay Unlocked**: App remains unlocked after password change
+   - In-memory password updated
+   - No need for user to re-authenticate
+
+**UI Components:**
+- `src/components/settings/ChangePasswordForm.tsx` - Main password change form
+- `src/components/settings/SettingsScreen.tsx` - Settings container
+- `src/App.tsx:119-136` - Settings tab routing
+
+**Files Involved:**
+- `src/context/AuthContext.tsx:24,48,162,291-372` - unlockedViaRecovery state, changePassword() method
+- `src/services/crypto.service.ts` - Password escrow encryption/decryption methods
+- `src/components/settings/` - UI components
+
 ### Testing OneDrive Sync
 
 **Common issues:**
@@ -295,8 +390,11 @@ if (result.action === 'download') {
 
 **Key Security Properties:**
 - Zero-knowledge: OneDrive cannot decrypt data
-- Master password never stored
+- Master password never stored (only used to derive encryption key)
+- Password escrow: Master password encrypted with recovery phrase for recovery
 - Recovery phrase as backup authentication mechanism
+- Password change capability: Users can change password if compromised
+- Forward secrecy: New salt generated when changing password
 - Auto-lock after inactivity (future feature)
 - Memory cleared on lock/logout
 
