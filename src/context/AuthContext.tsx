@@ -26,6 +26,7 @@ interface AuthContextType {
   unlock: (password: string, recoveryPhrase?: string) => Promise<void>;
   lock: () => Promise<void>;
   createAccount: (password: string, recoveryPhrase: string) => Promise<void>;
+  reloadFromDatabase: () => Promise<void>; // Reload data from IndexedDB after sync
 
   // Data mutations (these auto-save to IndexedDB)
   updatePasswords: (entries: PasswordEntry[]) => Promise<void>;
@@ -155,6 +156,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLocked(true);
     setError(null);
   }, []);
+
+  /**
+   * Reload data from IndexedDB (after sync operations)
+   * Uses stored password to decrypt updated data without requiring user re-entry
+   */
+  const reloadFromDatabase = useCallback(async () => {
+    if (!password || isLocked) {
+      throw new Error('Cannot reload: app is locked or password not available');
+    }
+
+    try {
+      setError(null);
+
+      // Get latest encrypted data from IndexedDB
+      const encryptedData = await databaseService.getEncryptedData();
+      if (!encryptedData) {
+        throw new Error('No encrypted data found in database');
+      }
+
+      // Decrypt with stored password
+      const decryptedJson = await cryptoService.decrypt(encryptedData, password);
+      const data: AppData = JSON.parse(decryptedJson);
+
+      // Update in-memory state
+      setAppData(data);
+      console.log('AuthContext: Data reloaded from database successfully');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to reload data';
+      setError(message);
+      throw err;
+    }
+  }, [password, isLocked]);
 
   /**
    * Create a new account (first-time setup)
@@ -320,6 +353,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         unlock,
         lock,
         createAccount,
+        reloadFromDatabase,
         updatePasswords,
         updateCreditCards,
         updateCrypto,

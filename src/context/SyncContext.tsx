@@ -8,6 +8,7 @@ import type { AccountInfo } from '@azure/msal-browser';
 import ConflictResolutionDialog from '../components/sync/ConflictResolutionDialog';
 import { useToast } from '../hooks/useToast';
 import { getUserFriendlyErrorMessage } from '../utils/errorMessages';
+import { useAuth } from './AuthContext';
 
 interface SyncContextType {
   syncState: SyncState;
@@ -24,6 +25,7 @@ const SyncContext = createContext<SyncContextType | undefined>(undefined);
 
 export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const toast = useToast();
+  const { reloadFromDatabase } = useAuth();
   const [syncState, setSyncState] = useState<SyncState>({
     status: 'idle',
     lastSyncTime: null,
@@ -159,6 +161,17 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isSyncing: false,
         }));
 
+        // If data was downloaded, reload from database to update UI
+        if (result.action === 'download') {
+          try {
+            await reloadFromDatabase();
+            console.log('SyncContext: UI refreshed after download');
+          } catch (err) {
+            console.error('Failed to reload data after download:', err);
+            toast.warning('Data synced but UI refresh failed. Please restart the app.');
+          }
+        }
+
         // Show success toast
         const actionLabel = result.action === 'upload' ? 'uploaded to' :
                            result.action === 'download' ? 'downloaded from' : 'synced with';
@@ -205,7 +218,7 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
         onClick: () => performSync(),
       });
     }
-  }, [toast]);
+  }, [toast, reloadFromDatabase]);
 
   const forceUpload = useCallback(async () => {
     try {
@@ -261,6 +274,15 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isSyncing: false,
         }));
 
+        // Reload data from database to update UI
+        try {
+          await reloadFromDatabase();
+          console.log('SyncContext: UI refreshed after force download');
+        } catch (err) {
+          console.error('Failed to reload data after force download:', err);
+          toast.warning('Data downloaded but UI refresh failed. Please restart the app.');
+        }
+
         setTimeout(() => {
           setSyncState((prev) => ({ ...prev, status: 'idle' }));
         }, 3000);
@@ -281,7 +303,7 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isSyncing: false,
       }));
     }
-  }, []);
+  }, [reloadFromDatabase, toast]);
 
   const updateSettings = useCallback(async (settings: Partial<SyncSettings>) => {
     try {
@@ -322,12 +344,15 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const actionLabel = action === 'keep-local' ? 'Local version uploaded' : 'Cloud version downloaded';
           toast.success(`Conflict resolved: ${actionLabel}`);
 
-          // If downloaded remote, reload page to refresh decrypted data
+          // If downloaded remote, reload from database to refresh UI
           if (action === 'download-remote') {
-            toast.info('Reloading to apply changes...', 2000);
-            setTimeout(() => {
-              window.location.reload();
-            }, 1000);
+            try {
+              await reloadFromDatabase();
+              console.log('SyncContext: UI refreshed after conflict resolution (download-remote)');
+            } catch (err) {
+              console.error('Failed to reload data after conflict resolution:', err);
+              toast.warning('Conflict resolved but UI refresh failed. Please restart the app.');
+            }
           }
 
           // Reset to idle after 3 seconds
@@ -356,7 +381,7 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
         toast.error(errorMessage);
       }
     },
-    [conflictData, toast]
+    [conflictData, toast, reloadFromDatabase]
   );
 
   const handleConflictCancel = useCallback(() => {
