@@ -351,8 +351,8 @@ const Badge = styled.span`
 const CredentialCard = styled.div`
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px;
+  gap: 12px;
+  padding: 12px;
   background: ${(props) => props.theme.colors.surface};
   border: 1px solid ${(props) => props.theme.colors.border};
   border-radius: 8px;
@@ -365,52 +365,63 @@ const CredentialCard = styled.div`
 `;
 
 const CredentialIcon = styled.div`
-  font-size: 32px;
+  font-size: 28px;
   line-height: 1;
+  flex-shrink: 0;
 `;
 
 const CredentialInfo = styled.div`
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0; /* Allow text truncation */
 `;
 
 const CredentialName = styled.div`
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: ${(props) => props.theme.colors.text};
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `;
 
 const CredentialMeta = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 `;
 
 const MetaItem = styled.div`
   display: flex;
-  gap: 8px;
-  font-size: 13px;
+  gap: 6px;
+  font-size: 12px;
 `;
 
 const MetaLabel = styled.span`
   color: ${(props) => props.theme.colors.textSecondary};
+  flex-shrink: 0;
 `;
 
 const MetaValue = styled.span`
   color: ${(props) => props.theme.colors.text};
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `;
 
 const RemoveButton = styled.button`
   background: transparent;
   border: none;
   cursor: pointer;
-  font-size: 24px;
+  font-size: 20px;
   padding: 8px;
   border-radius: 8px;
   transition: all 0.2s;
   line-height: 1;
+  flex-shrink: 0;
+  align-self: center;
 
   &:hover {
     background: rgba(220, 53, 69, 0.1);
