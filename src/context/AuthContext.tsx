@@ -3,6 +3,7 @@ import type { AppData, PasswordEntry, CreditCardEntry, CryptoEntry, FreetextEntr
 import { cryptoService } from '../services/crypto.service';
 import { databaseService } from '../services/database.service';
 import { oneDriveService } from '../services/onedrive.service';
+import { webAuthnService, type BiometricCredential } from '../services/webauthn.service';
 
 /**
  * Helper to convert Base64 string to Uint8Array
@@ -22,13 +23,22 @@ interface AuthContextType {
   appData: AppData | null;
   error: string | null;
   unlockedViaRecovery: boolean; // Track if unlocked via recovery phrase
+  biometricAvailable: boolean; // WebAuthn support available
+  hasBiometricEnabled: boolean; // User has enrolled biometric credentials
 
   // Actions
   unlock: (password: string, recoveryPhrase?: string) => Promise<void>;
+  unlockWithBiometric: () => Promise<void>; // Unlock with Face ID/Windows Hello
   lock: () => Promise<void>;
   createAccount: (password: string, recoveryPhrase: string) => Promise<void>;
   reloadFromDatabase: () => Promise<void>; // Reload data from IndexedDB after sync
   changePassword: (currentPassword: string | null, newPassword: string, recoveryPhrase: string) => Promise<void>;
+
+  // Biometric authentication
+  enableBiometric: (deviceName: string) => Promise<void>; // Enroll biometric credential
+  disableBiometric: (credentialId: string) => Promise<void>; // Remove biometric credential
+  getBiometricCredentials: () => Promise<BiometricCredential[]>; // Get all credentials
+  refreshBiometricStatus: () => Promise<void>; // Refresh biometric availability
 
   // Data mutations (these auto-save to IndexedDB)
   updatePasswords: (entries: PasswordEntry[]) => Promise<void>;
@@ -46,6 +56,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [error, setError] = useState<string | null>(null);
   const [password, setPassword] = useState<string | null>(null); // Keep password in memory while unlocked
   const [unlockedViaRecovery, setUnlockedViaRecovery] = useState(false); // Track unlock method
+  const [biometricAvailable, setBiometricAvailable] = useState(false); // WebAuthn support
+  const [hasBiometricEnabled, setHasBiometricEnabled] = useState(false); // User has enrolled
+
+  // Check biometric availability
+  const checkBiometricAvailability = useCallback(async () => {
+    const isSupported = webAuthnService.isSupported();
+    const isPlatformAvailable = await webAuthnService.isPlatformAuthenticatorAvailable();
+    const hasCredentials = await databaseService.hasBiometricCredentials();
+
+    setBiometricAvailable(isSupported && isPlatformAvailable);
+    setHasBiometricEnabled(hasCredentials);
+
+    console.log('Biometric status:', {
+      supported: isSupported,
+      platformAvailable: isPlatformAvailable,
+      hasCredentials,
+    });
+  }, []);
 
   // Initialize: Check if app has been set up
   useEffect(() => {
@@ -59,13 +87,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setIsLocked(true);
           setAppData(null);
         }
+
+        // Check biometric availability
+        await checkBiometricAvailability();
       } catch (err) {
         console.error('Auth initialization failed:', err);
         setError(err instanceof Error ? err.message : 'Initialization failed');
       }
     };
     initialize();
-  }, []);
+  }, [checkBiometricAvailability]);
 
   /**
    * Save current appData to IndexedDB as encrypted blob
@@ -285,8 +316,121 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   /**
+   * Unlock with biometric authentication (Face ID, Windows Hello, etc.)
+   */
+  const unlockWithBiometric = useCallback(async () => {
+    try {
+      setError(null);
+
+      // Get stored biometric credentials
+      const credentials = await databaseService.getBiometricCredentials();
+      if (credentials.length === 0) {
+        throw new Error('No biometric credentials found. Please enroll first.');
+      }
+
+      // Authenticate with WebAuthn and decrypt password
+      const password = await webAuthnService.authenticateAndDecrypt(credentials);
+
+      // Update last used timestamp
+      const firstCredential = credentials[0];
+      await databaseService.updateCredentialLastUsed(firstCredential.id);
+
+      // Use decrypted password to unlock (calls existing unlock flow)
+      await unlock(password);
+
+      console.log('Biometric unlock successful');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Biometric unlock failed';
+      setError(message);
+      throw err;
+    }
+  }, [unlock]);
+
+  /**
+   * Enable biometric authentication (enrollment)
+   * User must be unlocked first
+   */
+  const enableBiometric = useCallback(
+    async (deviceName: string) => {
+      try {
+        setError(null);
+
+        if (isLocked || !password) {
+          throw new Error('You must be unlocked to enable biometric authentication');
+        }
+
+        if (!biometricAvailable) {
+          throw new Error('Biometric authentication is not available on this device');
+        }
+
+        // Get device ID for user identifier
+        const deviceId = await databaseService.getConfig('deviceId');
+        if (!deviceId) {
+          throw new Error('Device ID not found');
+        }
+
+        // Register WebAuthn credential
+        const credential = await webAuthnService.registerCredential(
+          deviceId,
+          deviceName,
+          password
+        );
+
+        // Save credential to database
+        await databaseService.saveBiometricCredential(credential);
+
+        // Update state
+        setHasBiometricEnabled(true);
+
+        console.log('Biometric authentication enabled:', deviceName);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to enable biometric authentication';
+        setError(message);
+        throw err;
+      }
+    },
+    [isLocked, password, biometricAvailable]
+  );
+
+  /**
+   * Disable biometric authentication (remove credential)
+   */
+  const disableBiometric = useCallback(async (credentialId: string) => {
+    try {
+      setError(null);
+
+      await databaseService.deleteBiometricCredential(credentialId);
+
+      // Check if any credentials remain
+      const hasCredentials = await databaseService.hasBiometricCredentials();
+      setHasBiometricEnabled(hasCredentials);
+
+      console.log('Biometric credential removed:', credentialId.substring(0, 20) + '...');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to disable biometric authentication';
+      setError(message);
+      throw err;
+    }
+  }, []);
+
+  /**
+   * Get all biometric credentials
+   */
+  const getBiometricCredentials = useCallback(async (): Promise<BiometricCredential[]> => {
+    return await databaseService.getBiometricCredentials();
+  }, []);
+
+  /**
+   * Refresh biometric availability status
+   */
+  const refreshBiometricStatus = useCallback(async () => {
+    await checkBiometricAvailability();
+  }, [checkBiometricAvailability]);
+
+  /**
    * Change password (re-encrypt all data with new password)
    * Requires recovery phrase to re-encrypt new password for future recovery
+   * IMPORTANT: Also re-encrypt all biometric credentials with new password
    */
   const changePassword = useCallback(
     async (currentPassword: string | null, newPassword: string, recoveryPhrase: string) => {
@@ -360,6 +504,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Update in-memory password
         setPassword(newPassword);
+
+        // Re-encrypt all biometric credentials with new password
+        const biometricCredentials = await databaseService.getBiometricCredentials();
+        if (biometricCredentials.length > 0) {
+          console.log('ChangePassword: Re-encrypting', biometricCredentials.length, 'biometric credentials');
+
+          for (const credential of biometricCredentials) {
+            // Re-encrypt password with same credential ID
+            const newEncryptedPassword = await webAuthnService.reencryptPassword(
+              newPassword,
+              credential.id
+            );
+
+            // Keep the same credential ID and metadata, just update encrypted password
+            const reencryptedCredential: BiometricCredential = {
+              ...credential,
+              encryptedPassword: newEncryptedPassword,
+            };
+
+            await databaseService.saveBiometricCredential(reencryptedCredential);
+          }
+
+          console.log('ChangePassword: Biometric credentials re-encrypted successfully');
+        }
 
         console.log('ChangePassword: Password changed successfully');
       } catch (err) {
@@ -471,11 +639,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         appData,
         error,
         unlockedViaRecovery,
+        biometricAvailable,
+        hasBiometricEnabled,
         unlock,
+        unlockWithBiometric,
         lock,
         createAccount,
         reloadFromDatabase,
         changePassword,
+        enableBiometric,
+        disableBiometric,
+        getBiometricCredentials,
+        refreshBiometricStatus,
         updatePasswords,
         updateCreditCards,
         updateCrypto,
