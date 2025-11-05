@@ -5,9 +5,12 @@ import { useAuth } from '../../context/AuthContext';
 import Button from '../common/Button';
 import SearchBar from '../common/SearchBar';
 import Modal from '../common/Modal';
+import ImportExport from '../common/ImportExport';
 import FreetextForm from './FreetextForm';
 import FreetextQuickView from './FreetextQuickView';
 import FreetextDetail from './FreetextDetail';
+import { csvService } from '../../services/csv.service';
+import { printService } from '../../services/print.service';
 
 const FreetextList: React.FC = () => {
   const { appData, updateFreetext } = useAuth();
@@ -88,6 +91,26 @@ const FreetextList: React.FC = () => {
     setDeleteConfirmModal({ isOpen: false, entryId: null });
   };
 
+  const handleImport = async (importedData: FreetextEntry[]) => {
+    try {
+      setSavedError(null);
+      // Merge imported data with existing data (imported entries are added)
+      const mergedEntries = [...entries, ...importedData];
+      await updateFreetext(mergedEntries);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to import freetext entries';
+      setSavedError(message);
+      console.error('Import failed:', err);
+      throw err; // Re-throw to let ImportExport component handle the error display
+    }
+  };
+
+  const handlePrint = () => {
+    // Print all freetext entries (or filtered entries if search is active)
+    const entriesToPrint = searchQuery ? filteredEntries : entries;
+    printService.printFreetextEntries(entriesToPrint, 'Freetext Entries');
+  };
+
   // Filter entries based on search query
   const filteredEntries = entries.filter((entry) => {
     const query = searchQuery.toLowerCase();
@@ -130,6 +153,18 @@ const FreetextList: React.FC = () => {
         onChange={setSearchQuery}
         placeholder="Search freetext entries by title, category, content, tags..."
       />
+      <ImportExport
+        data={entries}
+        onImport={handleImport}
+        exportFunction={csvService.exportFreetextToCsv}
+        importFunction={csvService.importFreetextFromCsv}
+        filename={`freetext-${new Date().toISOString().split('T')[0]}.csv`}
+      />
+      {entries.length > 0 && (
+        <Button onClick={handlePrint} style={{ marginBottom: '10px' }}>
+          🖨️ Print
+        </Button>
+      )}
       <div>
         {filteredEntries.length === 0 ? (
           <p style={{ textAlign: 'center', padding: '2rem', color: '#6c757d' }}>

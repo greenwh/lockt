@@ -5,9 +5,11 @@ import { useAuth } from '../../context/AuthContext';
 import Button from '../common/Button';
 import SearchBar from '../common/SearchBar';
 import Modal from '../common/Modal';
+import ImportExport from '../common/ImportExport';
 import PasswordForm from './PasswordForm';
 import PasswordQuickView from './PasswordQuickView';
 import PasswordDetail from './PasswordDetail';
+import { csvService } from '../../services/csv.service';
 
 const PasswordList: React.FC = () => {
   const { appData, updatePasswords } = useAuth();
@@ -87,6 +89,20 @@ const PasswordList: React.FC = () => {
     setDeleteConfirmModal({ isOpen: false, entryId: null });
   };
 
+  const handleImport = async (importedData: PasswordEntry[]) => {
+    try {
+      setSavedError(null);
+      // Merge imported data with existing data (imported entries are added)
+      const mergedEntries = [...entries, ...importedData];
+      await updatePasswords(mergedEntries);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to import passwords';
+      setSavedError(message);
+      console.error('Import failed:', err);
+      throw err; // Re-throw to let ImportExport component handle the error display
+    }
+  };
+
   // Filter entries based on search query
   const filteredEntries = entries.filter((entry) => {
     const query = searchQuery.toLowerCase();
@@ -129,6 +145,13 @@ const PasswordList: React.FC = () => {
         value={searchQuery}
         onChange={setSearchQuery}
         placeholder="Search passwords by account, username, email, tags..."
+      />
+      <ImportExport
+        data={entries}
+        onImport={handleImport}
+        exportFunction={csvService.exportPasswordsToCsv}
+        importFunction={csvService.importPasswordsFromCsv}
+        filename={`passwords-${new Date().toISOString().split('T')[0]}.csv`}
       />
       <div>
         {filteredEntries.length === 0 ? (
