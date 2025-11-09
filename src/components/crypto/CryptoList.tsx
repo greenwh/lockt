@@ -5,9 +5,11 @@ import { useAuth } from '../../context/AuthContext';
 import Button from '../common/Button';
 import SearchBar from '../common/SearchBar';
 import Modal from '../common/Modal';
+import ImportExport from '../common/ImportExport';
 import CryptoForm from './CryptoForm';
 import CryptoQuickView from './CryptoQuickView';
 import CryptoDetail from './CryptoDetail';
+import { csvService } from '../../services/csv.service';
 
 const CryptoList: React.FC = () => {
   const { appData, updateCrypto } = useAuth();
@@ -88,6 +90,20 @@ const CryptoList: React.FC = () => {
     setDeleteConfirmModal({ isOpen: false, entryId: null });
   };
 
+  const handleImport = async (importedData: CryptoEntry[]) => {
+    try {
+      setSavedError(null);
+      // Merge imported data with existing data (imported entries are added)
+      const mergedEntries = [...cryptoEntries, ...importedData];
+      await updateCrypto(mergedEntries);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to import crypto entries';
+      setSavedError(message);
+      console.error('Import failed:', err);
+      throw err; // Re-throw to let ImportExport component handle the error display
+    }
+  };
+
   // Filter entries based on search query
   const filteredEntries = cryptoEntries.filter((entry) => {
     const query = searchQuery.toLowerCase();
@@ -132,6 +148,13 @@ const CryptoList: React.FC = () => {
         value={searchQuery}
         onChange={setSearchQuery}
         placeholder="Search crypto entries by account, username, email, wallet addresses, tags..."
+      />
+      <ImportExport
+        data={cryptoEntries}
+        onImport={handleImport}
+        exportFunction={csvService.exportCryptoToCsv}
+        importFunction={csvService.importCryptoFromCsv}
+        filename={`crypto-${new Date().toISOString().split('T')[0]}.csv`}
       />
       <div>
         {filteredEntries.length === 0 ? (

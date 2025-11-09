@@ -4,9 +4,12 @@ import type { HealthJournalEntry } from '../../types/data.types';
 import Button from '../common/Button';
 import SearchBar from '../common/SearchBar';
 import Modal from '../common/Modal';
+import ImportExport from '../common/ImportExport';
 import JournalForm from './JournalForm';
 import JournalQuickView from './JournalQuickView';
 import JournalDetail from './JournalDetail';
+import { csvService } from '../../services/csv.service';
+import { printService } from '../../services/print.service';
 
 interface JournalListProps {
   entries: HealthJournalEntry[];
@@ -77,6 +80,18 @@ const JournalList: React.FC<JournalListProps> = ({ entries, setEntries }) => {
     setDeleteConfirmModal({ isOpen: false, entryId: null });
   };
 
+  const handleImport = async (importedData: HealthJournalEntry[]) => {
+    // Merge imported data with existing data (imported entries are added)
+    const mergedEntries = [...safeEntries, ...importedData];
+    setEntries(mergedEntries);
+  };
+
+  const handlePrint = () => {
+    // Print all journal entries (or filtered entries if search is active)
+    const entriesToPrint = searchQuery ? filteredEntries : safeEntries;
+    printService.printHealthJournal(entriesToPrint, 'Health Journal');
+  };
+
   // Filter entries based on search query
   const filteredEntries = safeEntries.filter((entry) => {
     const query = searchQuery.toLowerCase();
@@ -116,6 +131,18 @@ const JournalList: React.FC<JournalListProps> = ({ entries, setEntries }) => {
         onChange={setSearchQuery}
         placeholder="Search journal by reason, entry content..."
       />
+      <ImportExport
+        data={safeEntries}
+        onImport={handleImport}
+        exportFunction={csvService.exportHealthJournalToCsv}
+        importFunction={csvService.importHealthJournalFromCsv}
+        filename={`health-journal-${new Date().toISOString().split('T')[0]}.csv`}
+      />
+      {safeEntries.length > 0 && (
+        <Button onClick={handlePrint} style={{ marginBottom: '10px' }}>
+          🖨️ Print
+        </Button>
+      )}
       <div>
         {filteredEntries.length === 0 ? (
           <p style={{ textAlign: 'center', padding: '2rem', color: '#6c757d' }}>

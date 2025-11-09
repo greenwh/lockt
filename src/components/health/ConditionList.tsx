@@ -4,9 +4,12 @@ import type { HealthCondition } from '../../types/data.types';
 import Button from '../common/Button';
 import SearchBar from '../common/SearchBar';
 import Modal from '../common/Modal';
+import ImportExport from '../common/ImportExport';
 import ConditionForm from './ConditionForm';
 import ConditionQuickView from './ConditionQuickView';
 import ConditionDetail from './ConditionDetail';
+import { csvService } from '../../services/csv.service';
+import { printService } from '../../services/print.service';
 
 interface ConditionListProps {
   entries: HealthCondition[];
@@ -77,6 +80,18 @@ const ConditionList: React.FC<ConditionListProps> = ({ entries, setEntries }) =>
     setDeleteConfirmModal({ isOpen: false, entryId: null });
   };
 
+  const handleImport = async (importedData: HealthCondition[]) => {
+    // Merge imported data with existing data (imported entries are added)
+    const mergedEntries = [...safeEntries, ...importedData];
+    setEntries(mergedEntries);
+  };
+
+  const handlePrint = () => {
+    // Print all conditions (or filtered entries if search is active)
+    const entriesToPrint = searchQuery ? filteredEntries : safeEntries;
+    printService.printHealthConditions(entriesToPrint, 'Health Conditions');
+  };
+
   // Filter entries based on search query
   const filteredEntries = safeEntries.filter((entry) => {
     const query = searchQuery.toLowerCase();
@@ -117,6 +132,18 @@ const ConditionList: React.FC<ConditionListProps> = ({ entries, setEntries }) =>
         onChange={setSearchQuery}
         placeholder="Search conditions by name, doctor/agency, symptomology..."
       />
+      <ImportExport
+        data={safeEntries}
+        onImport={handleImport}
+        exportFunction={csvService.exportHealthConditionsToCsv}
+        importFunction={csvService.importHealthConditionsFromCsv}
+        filename={`health-conditions-${new Date().toISOString().split('T')[0]}.csv`}
+      />
+      {safeEntries.length > 0 && (
+        <Button onClick={handlePrint} style={{ marginBottom: '10px' }}>
+          🖨️ Print
+        </Button>
+      )}
       <div>
         {filteredEntries.length === 0 ? (
           <p style={{ textAlign: 'center', padding: '2rem', color: '#6c757d' }}>
