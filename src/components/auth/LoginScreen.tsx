@@ -7,7 +7,7 @@ import Button from '../common/Button';
 import Input from '../common/Input';
 
 const LoginScreen: React.FC = () => {
-  const { unlock, error } = useAuth();
+  const { unlock, unlockWithBiometric, error, hasBiometricEnabled, biometricAvailable } = useAuth();
   const [password, setPassword] = useState('');
   const [recoveryPhrase, setRecoveryPhrase] = useState('');
   const [useRecovery, setUseRecovery] = useState(false);
@@ -52,9 +52,45 @@ const LoginScreen: React.FC = () => {
     }
   };
 
+  const handleBiometricUnlock = async () => {
+    try {
+      setIsLoading(true);
+      setLocalError(null);
+      await unlockWithBiometric();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Biometric unlock failed';
+      setLocalError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <Container>
       <Title>Unlock Lockt</Title>
+
+      {/* Biometric Unlock Button (if enabled) */}
+      {hasBiometricEnabled && biometricAvailable && !useRecovery && (
+        <BiometricSection>
+          <BiometricButton
+            type="button"
+            onClick={handleBiometricUnlock}
+            disabled={isLoading}
+          >
+            <BiometricIcon>🔐</BiometricIcon>
+            <BiometricText>
+              <BiometricTitle>Use Face ID / Windows Hello</BiometricTitle>
+              <BiometricSubtext>Quick and secure authentication</BiometricSubtext>
+            </BiometricText>
+          </BiometricButton>
+          <Divider>
+            <DividerLine />
+            <DividerText>or</DividerText>
+            <DividerLine />
+          </Divider>
+        </BiometricSection>
+      )}
+
       <Form onSubmit={handleUnlock}>
         {!useRecovery && (
           <Input
@@ -198,4 +234,79 @@ const ErrorMessage = styled.div`
   margin-top: 10px;
   text-align: center;
   font-size: 14px;
+`;
+
+const BiometricSection = styled.div`
+  margin-bottom: 24px;
+`;
+
+const BiometricButton = styled.button`
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  background: linear-gradient(135deg, ${(props) => props.theme.colors.primary} 0%, #4a90e2 100%);
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.2);
+
+  &:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 123, 255, 0.3);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+`;
+
+const BiometricIcon = styled.div`
+  font-size: 40px;
+  line-height: 1;
+`;
+
+const BiometricText = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  flex: 1;
+`;
+
+const BiometricTitle = styled.div`
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+`;
+
+const BiometricSubtext = styled.div`
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+`;
+
+const Divider = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 24px 0;
+`;
+
+const DividerLine = styled.div`
+  flex: 1;
+  height: 1px;
+  background: ${(props) => props.theme.colors.border};
+`;
+
+const DividerText = styled.span`
+  font-size: 14px;
+  color: ${(props) => props.theme.colors.textSecondary};
+  font-weight: 500;
 `;
