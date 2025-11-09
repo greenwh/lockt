@@ -3,6 +3,7 @@
 import React from 'react';
 import styled from 'styled-components';
 import ChangePasswordForm from './ChangePasswordForm';
+import BiometricSettings from './BiometricSettings';
 
 const SettingsScreen: React.FC = () => {
   return (
@@ -13,7 +14,12 @@ const SettingsScreen: React.FC = () => {
       </Header>
 
       <Section>
-        <SectionTitle>Security</SectionTitle>
+        <SectionTitle>Biometric Authentication</SectionTitle>
+        <BiometricSettings />
+      </Section>
+
+      <Section>
+        <SectionTitle>Password</SectionTitle>
         <ChangePasswordForm />
       </Section>
     </Container>

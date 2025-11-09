@@ -21,8 +21,8 @@ const PasswordQuickView: React.FC<PasswordQuickViewProps> = ({ entry, onSelect, 
     <QuickViewRow onClick={() => onSelect(entry)}>
       <QuickViewCell>{entry.account}</QuickViewCell>
       <QuickViewCell>{entry.username}</QuickViewCell>
-      <QuickViewCell>{'•'.repeat(8)}</QuickViewCell>
-      <QuickViewCell>{entry.pin ? '•'.repeat(4) : ''}</QuickViewCell>
+      <QuickViewCell>{entry.password}</QuickViewCell>
+      <QuickViewCell>{entry.pin || ''}</QuickViewCell>
       {onDelete && (
         <QuickViewCell>
           <button

@@ -10,9 +10,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - ✅ **Phase 1-2**: Complete (encryption, data entry, UI)
 - ✅ **Phase 3**: Complete (OneDrive sync with MSAL, multi-device sync working)
 - 🟢 **Phase 3a**: Partially Complete (Oct 2025 bug fixes - see below)
-- 📅 **Phase 4+**: Biometric auth, export, polish
+- ✅ **Phase 4**: Complete (Biometric authentication with WebAuthn)
+- 📅 **Phase 5+**: Export, advanced features, polish
 
-**Recent Updates (October 25, 2025)**:
+**Recent Updates (November 2025)**:
+**Phase 4 - Biometric Authentication (Complete):**
+- ✅ WebAuthn integration (Face ID, Touch ID, Windows Hello, fingerprint)
+- ✅ Platform authenticator support with user verification
+- ✅ Credential-based password encryption (credential ID as key derivation)
+- ✅ Multi-device credential management (enroll multiple devices)
+- ✅ Biometric unlock button on login screen
+- ✅ Settings UI for credential enrollment and management
+- ✅ Password re-encryption on password change
+- ✅ Fallback to password/recovery phrase authentication
+
+**Previous Updates (October 25, 2025)**:
 Critical bug fixes and security features completing most of Phase 3a:
 - ✅ Recovery phrase generation (full BIP39 wordlist - 2048 words)
 - ✅ Recovery phrase login support (UI toggle on login screen)
@@ -75,11 +87,11 @@ The app requires Azure App Registration for OneDrive integration:
 ```
 Components (UI)
     ↓
-Context (SyncContext)
+Context (AuthContext, SyncContext)
     ↓
-Services (crypto.service, database.service, onedrive.service, sync.service)
+Services (crypto.service, database.service, onedrive.service, sync.service, webauthn.service)
     ↓
-Storage (IndexedDB local, OneDrive cloud)
+Storage (IndexedDB local, OneDrive cloud, Platform Authenticator)
 ```
 
 ### Data Flow
@@ -113,9 +125,10 @@ Storage (IndexedDB local, OneDrive cloud)
 
 **Services (Business Logic)**
 - `src/services/crypto.service.ts` - All encryption/decryption operations, key derivation, recovery phrase generation
-- `src/services/database.service.ts` - IndexedDB operations for local encrypted storage
+- `src/services/database.service.ts` - IndexedDB operations for local encrypted storage (including biometric credentials)
 - `src/services/onedrive.service.ts` - Microsoft Graph API integration for cloud sync
 - `src/services/sync.service.ts` - Orchestrates sync logic between local and cloud
+- `src/services/webauthn.service.ts` - WebAuthn/biometric authentication, credential management
 
 **Configuration**
 - `src/config/auth.config.ts` - MSAL configuration (client ID, scopes, redirect URI)
@@ -129,22 +142,24 @@ Storage (IndexedDB local, OneDrive cloud)
   - Health data: `HealthProvider`, `HealthCondition`, `HealthImpairment`, `HealthJournalEntry`
 
 **Context**
-- `src/context/AuthContext.tsx` - Authentication state, unlock/lock, data mutations, and `reloadFromDatabase()` method
+- `src/context/AuthContext.tsx` - Authentication state (password/biometric), unlock/lock, data mutations, and `reloadFromDatabase()` method
 - `src/context/SyncContext.tsx` - Global state for sync status, account info, and sync operations
 
 **Components**
 - `src/components/layout/` - App shell, tab navigation, header
-- `src/components/auth/` - Login and setup screens
+- `src/components/auth/` - Login and setup screens (with biometric unlock)
+- `src/components/settings/` - Settings screens (password change, biometric management)
 - `src/components/[category]/` - Category-specific list/detail/form components
 - `src/components/sync/` - Sync UI components
 
 ### IndexedDB Schema
 
-**Database**: `lockt-db` (version 1)
+**Database**: `lockt-db` (version 2)
 
 **Object Stores:**
 1. `encrypted-data` - Single record with key `'main'` containing the encrypted blob
-2. `app-config` - Key-value store for salt, deviceId, lastSyncTime, etc.
+2. `app-config` - Key-value store for salt, deviceId, lastSyncTime, encryptedPassword, etc.
+3. `biometric-credentials` - WebAuthn credentials (credential ID as key), added in v2
 
 **Critical Pattern**: Always call `await databaseService.init()` before any database operations to ensure stores exist.
 
@@ -337,6 +352,177 @@ const changePassword = async (
 - `src/context/AuthContext.tsx:24,48,162,291-372` - unlockedViaRecovery state, changePassword() method
 - `src/services/crypto.service.ts` - Password escrow encryption/decryption methods
 - `src/components/settings/` - UI components
+
+### Biometric Authentication (Phase 4)
+
+**Pattern: WebAuthn-Based Biometric Authentication**
+
+Lockt supports biometric authentication (Face ID, Touch ID, Windows Hello, fingerprint) using the WebAuthn API. This provides a convenient and secure way to unlock the app without entering the master password.
+
+**Architecture:**
+
+The biometric authentication system uses a credential-based password encryption model:
+
+1. **Enrollment:** User's master password is encrypted using a key derived from the WebAuthn credential ID
+2. **Authentication:** WebAuthn verifies the user's biometric, returns the credential ID, which is used to decrypt the password
+3. **Unlock:** Decrypted password is used with the existing unlock flow
+
+**Technical Flow:**
+
+```typescript
+// ENROLLMENT (Settings → Enable Biometric)
+async enableBiometric(deviceName: string) {
+  // 1. User must be unlocked (have password in memory)
+  if (isLocked || !password) throw new Error('Must be unlocked first');
+
+  // 2. Register WebAuthn credential with platform authenticator
+  const credential = await webAuthnService.registerCredential(
+    deviceId,
+    deviceName,
+    password // Current master password
+  );
+
+  // Behind the scenes:
+  // - Generate WebAuthn credential with user verification required
+  // - Derive encryption key from credential ID using PBKDF2
+  // - Encrypt password with derived key
+  // - Store encrypted password + credential metadata in IndexedDB
+
+  // 3. Save to database
+  await databaseService.saveBiometricCredential(credential);
+}
+
+// AUTHENTICATION (Login Screen → Use Face ID)
+async unlockWithBiometric() {
+  // 1. Get stored credentials from IndexedDB
+  const credentials = await databaseService.getBiometricCredentials();
+
+  // 2. Trigger WebAuthn authentication (biometric prompt)
+  const { credentialId } = await webAuthnService.authenticate(
+    credentials.map(c => c.id)
+  );
+
+  // 3. Find matching credential and decrypt password
+  const credential = credentials.find(c => c.id === credentialId);
+  const password = await webAuthnService.decryptPasswordWithCredential(
+    credential.encryptedPassword,
+    credentialId
+  );
+
+  // 4. Use existing unlock flow
+  await unlock(password);
+}
+```
+
+**Key Security Properties:**
+
+1. **Credential-Based Encryption**: Password encrypted with key derived from credential ID
+   - Credential ID is only returned after successful biometric verification
+   - No way to decrypt password without passing biometric check
+
+2. **Platform Authenticator**: Requires device-native biometrics
+   - `authenticatorAttachment: 'platform'`
+   - `userVerification: 'required'`
+   - Uses device's secure enclave (iOS) or TPM (Windows)
+
+3. **Multi-Device Support**: Each device gets its own credential
+   - Credentials are device-specific
+   - User can enroll multiple devices
+   - Removing a credential doesn't affect other devices
+
+4. **Password Change Compatibility**: Re-encrypts credentials when password changes
+   - Same credential ID used (no re-registration needed)
+   - New password encrypted with same credential-derived key
+   - Maintains biometric access after password change
+
+5. **Fallback Authentication**: Password and recovery phrase remain available
+   - Biometric is convenience feature, not replacement
+   - User can always use password/recovery phrase
+   - Critical if device biometric sensor fails
+
+**Database Schema:**
+
+```typescript
+// IndexedDB object store: 'biometric-credentials'
+interface BiometricCredential {
+  id: string;                    // Base64-encoded credential ID
+  publicKey: string;             // Base64-encoded public key
+  encryptedPassword: EncryptedData; // Password encrypted with credential-derived key
+  deviceName: string;            // User-friendly label
+  authenticatorType: 'platform'; // Platform authenticator
+  createdAt: number;             // Timestamp
+  lastUsedAt: number;            // Last authentication timestamp
+}
+```
+
+**UI Components:**
+
+- **Login Screen** (`src/components/auth/LoginScreen.tsx`):
+  - Shows biometric unlock button if credentials enrolled
+  - Prominent "Use Face ID / Windows Hello" button
+  - Fallback to password/recovery phrase options
+
+- **Biometric Settings** (`src/components/settings/BiometricSettings.tsx`):
+  - Enrollment form (requires user to be unlocked)
+  - List of enrolled devices with metadata
+  - Remove credential functionality
+  - Platform availability detection
+
+**Files Involved:**
+
+- `src/services/webauthn.service.ts` - WebAuthn credential management, encryption/decryption
+- `src/context/AuthContext.tsx:26-27,31,38-41,59-60,63-76,319-428` - Biometric state and methods
+- `src/services/database.service.ts:6,18-21,27,45-46,219-283` - Credential storage (DB v2)
+- `src/components/auth/LoginScreen.tsx:10,55-66,73-92` - Biometric unlock button
+- `src/components/settings/BiometricSettings.tsx` - Credential management UI
+- `src/components/settings/SettingsScreen.tsx:6,16-19` - Settings integration
+
+**Common Patterns:**
+
+1. **Check Availability:**
+```typescript
+const isAvailable = await webAuthnService.isPlatformAuthenticatorAvailable();
+const hasCredentials = await databaseService.hasBiometricCredentials();
+```
+
+2. **Enroll New Device:**
+```typescript
+// User must be unlocked first
+await enableBiometric('My iPhone');
+```
+
+3. **Authenticate:**
+```typescript
+await unlockWithBiometric(); // Triggers biometric prompt
+```
+
+4. **Manage Credentials:**
+```typescript
+const credentials = await getBiometricCredentials();
+await disableBiometric(credentialId);
+```
+
+**Platform Support:**
+
+- **iOS/iPadOS**: Face ID, Touch ID (Safari, PWA)
+- **macOS**: Touch ID (Safari, Chrome)
+- **Windows**: Windows Hello (PIN, face, fingerprint) (Edge, Chrome)
+- **Android**: Fingerprint, face unlock (Chrome, Edge)
+
+**Error Handling:**
+
+- `NotAllowedError`: User cancelled biometric prompt
+- `NotSupportedError`: Platform authenticator not available
+- `InvalidStateError`: Credential already exists (during enrollment)
+
+**Testing:**
+
+1. Enroll biometric on a device with platform authenticator
+2. Lock the app and verify biometric unlock works
+3. Change password and verify biometric still works
+4. Enroll second device and verify both work independently
+5. Remove credential and verify it's no longer usable
+6. Test fallback to password when biometric unavailable
 
 ### Testing OneDrive Sync
 
