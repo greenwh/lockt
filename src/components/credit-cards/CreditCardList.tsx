@@ -5,9 +5,11 @@ import { useAuth } from '../../context/AuthContext';
 import Button from '../common/Button';
 import SearchBar from '../common/SearchBar';
 import Modal from '../common/Modal';
+import ImportExport from '../common/ImportExport';
 import CreditCardForm from './CreditCardForm';
 import CreditCardQuickView from './CreditCardQuickView';
 import CreditCardDetail from './CreditCardDetail';
+import { csvService } from '../../services/csv.service';
 
 const CreditCardList: React.FC = () => {
   const { appData, updateCreditCards } = useAuth();
@@ -88,6 +90,20 @@ const CreditCardList: React.FC = () => {
     setDeleteConfirmModal({ isOpen: false, entryId: null });
   };
 
+  const handleImport = async (importedData: CreditCardEntry[]) => {
+    try {
+      setSavedError(null);
+      // Merge imported data with existing data (imported entries are added)
+      const mergedEntries = [...entries, ...importedData];
+      await updateCreditCards(mergedEntries);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to import credit cards';
+      setSavedError(message);
+      console.error('Import failed:', err);
+      throw err; // Re-throw to let ImportExport component handle the error display
+    }
+  };
+
   // Filter entries based on search query
   const filteredEntries = entries.filter((entry) => {
     const query = searchQuery.toLowerCase();
@@ -131,6 +147,13 @@ const CreditCardList: React.FC = () => {
         value={searchQuery}
         onChange={setSearchQuery}
         placeholder="Search credit cards by account, card number, email, tags..."
+      />
+      <ImportExport
+        data={entries}
+        onImport={handleImport}
+        exportFunction={csvService.exportCreditCardsToCsv}
+        importFunction={csvService.importCreditCardsFromCsv}
+        filename={`credit-cards-${new Date().toISOString().split('T')[0]}.csv`}
       />
       <div>
         {filteredEntries.length === 0 ? (

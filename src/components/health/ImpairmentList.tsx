@@ -4,9 +4,12 @@ import type { HealthImpairment, HealthCondition } from '../../types/data.types';
 import Button from '../common/Button';
 import SearchBar from '../common/SearchBar';
 import Modal from '../common/Modal';
+import ImportExport from '../common/ImportExport';
 import ImpairmentForm from './ImpairmentForm';
 import ImpairmentQuickView from './ImpairmentQuickView';
 import ImpairmentDetail from './ImpairmentDetail';
+import { csvService } from '../../services/csv.service';
+import { printService } from '../../services/print.service';
 
 interface ImpairmentListProps {
   entries: HealthImpairment[];
@@ -78,6 +81,18 @@ const ImpairmentList: React.FC<ImpairmentListProps> = ({ entries, setEntries, co
     setDeleteConfirmModal({ isOpen: false, entryId: null });
   };
 
+  const handleImport = async (importedData: HealthImpairment[]) => {
+    // Merge imported data with existing data (imported entries are added)
+    const mergedEntries = [...safeEntries, ...importedData];
+    setEntries(mergedEntries);
+  };
+
+  const handlePrint = () => {
+    // Print all impairments (or filtered entries if search is active)
+    const entriesToPrint = searchQuery ? filteredEntries : safeEntries;
+    printService.printHealthImpairments(entriesToPrint, 'Health Impairments');
+  };
+
   // Filter entries based on search query
   const filteredEntries = safeEntries.filter((entry) => {
     const query = searchQuery.toLowerCase();
@@ -116,6 +131,18 @@ const ImpairmentList: React.FC<ImpairmentListProps> = ({ entries, setEntries, co
         onChange={setSearchQuery}
         placeholder="Search impairments by description..."
       />
+      <ImportExport
+        data={safeEntries}
+        onImport={handleImport}
+        exportFunction={csvService.exportHealthImpairmentsToCsv}
+        importFunction={csvService.importHealthImpairmentsFromCsv}
+        filename={`health-impairments-${new Date().toISOString().split('T')[0]}.csv`}
+      />
+      {safeEntries.length > 0 && (
+        <Button onClick={handlePrint} style={{ marginBottom: '10px' }}>
+          🖨️ Print
+        </Button>
+      )}
       <div>
         {filteredEntries.length === 0 ? (
           <p style={{ textAlign: 'center', padding: '2rem', color: '#6c757d' }}>
