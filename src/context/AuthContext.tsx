@@ -4,6 +4,8 @@ import { cryptoService } from '../services/crypto.service';
 import { databaseService } from '../services/database.service';
 import { oneDriveService } from '../services/onedrive.service';
 import { webAuthnService, type BiometricCredential } from '../services/webauthn.service';
+import { auditLogService, detectChanges } from '../services/auditlog.service';
+import type { AuditLogCategory } from '../services/auditlog.service';
 
 /**
  * Helper to convert Base64 string to Uint8Array
@@ -577,13 +579,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
    * Helper to update AppData and save to database
    */
   const updateAppData = useCallback(
-    async (updateFn: (data: AppData) => AppData) => {
+    async (updateFn: (data: AppData) => AppData, auditCategory?: AuditLogCategory | 'health') => {
       if (!appData || isLocked || !password) {
         throw new Error('App is locked or no data loaded');
       }
 
       try {
         const updatedData = updateFn(appData);
+
+        // Detect and log data changes
+        if (auditCategory) {
+          try {
+            if (auditCategory === 'health') {
+              const healthSubs = ['providers', 'conditions', 'impairments', 'journal'] as const;
+              const allChanges = healthSubs.flatMap((sub) =>
+                detectChanges(sub, (appData.health?.[sub] as any[]) || [], (updatedData.health?.[sub] as any[]) || [])
+              );
+              await auditLogService.addEntries(allChanges);
+            } else {
+              const changes = detectChanges(auditCategory, (appData as any)[auditCategory] || [], (updatedData as any)[auditCategory] || []);
+              await auditLogService.addEntries(changes);
+            }
+          } catch (auditErr) {
+            console.error('Failed to log audit entries:', auditErr);
+          }
+        }
+
         setAppData(updatedData);
 
         // Re-encrypt and save to database
@@ -605,7 +626,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...data,
         passwords: entries,
         metadata: { ...data.metadata, lastModified: Date.now() },
-      }));
+      }), 'passwords');
     },
     [updateAppData]
   );
@@ -619,7 +640,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...data,
         creditCards: entries,
         metadata: { ...data.metadata, lastModified: Date.now() },
-      }));
+      }), 'creditCards');
     },
     [updateAppData]
   );
@@ -633,7 +654,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...data,
         crypto: entries,
         metadata: { ...data.metadata, lastModified: Date.now() },
-      }));
+      }), 'crypto');
     },
     [updateAppData]
   );
@@ -647,7 +668,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...data,
         freetext: entries,
         metadata: { ...data.metadata, lastModified: Date.now() },
-      }));
+      }), 'freetext');
     },
     [updateAppData]
   );
@@ -661,7 +682,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...data,
         health,
         metadata: { ...data.metadata, lastModified: Date.now() },
-      }));
+      }), 'health');
     },
     [updateAppData]
   );
