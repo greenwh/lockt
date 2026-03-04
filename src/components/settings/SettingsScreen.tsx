@@ -6,9 +6,11 @@ import ChangePasswordForm from './ChangePasswordForm';
 import BiometricSettings from './BiometricSettings';
 import SyncSettings from '../sync/SyncSettings';
 import SyncLog from '../sync/SyncLog';
+import AuditLog from './AuditLog';
 
 const SettingsScreen: React.FC = () => {
   const [showSyncLog, setShowSyncLog] = useState(false);
+  const [showAuditLog, setShowAuditLog] = useState(false);
 
   return (
     <Container>
@@ -24,6 +26,10 @@ const SettingsScreen: React.FC = () => {
           {showSyncLog ? 'Hide Sync History' : 'View Sync History'}
         </SyncLogToggle>
         {showSyncLog && <SyncLog />}
+        <SyncLogToggle onClick={() => setShowAuditLog((prev) => !prev)}>
+          {showAuditLog ? 'Hide Data Changes' : 'View Data Changes'}
+        </SyncLogToggle>
+        {showAuditLog && <AuditLog />}
       </Section>
 
       <Section>
