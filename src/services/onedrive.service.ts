@@ -99,6 +99,24 @@ class OneDriveService {
   }
 
   /**
+   * Try silent sign-in using cached refresh token.
+   * Never shows a popup. Returns null if no cached session.
+   */
+  async trySilentSignIn(): Promise<AccountInfo | null> {
+    const accounts = this.msalInstance.getAllAccounts();
+    if (accounts.length === 0) return null;
+    try {
+      await this.msalInstance.acquireTokenSilent({
+        ...loginRequest,
+        account: accounts[0],
+      });
+      return accounts[0];
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Sign out of Microsoft account
    */
   async signOut(): Promise<void> {

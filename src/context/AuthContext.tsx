@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import type { AppData, PasswordEntry, CreditCardEntry, CryptoEntry, FreetextEntry, HealthData } from '../types/data.types';
+import type { AppData, PasswordEntry, CreditCardEntry, CryptoEntry, FreetextEntry, HealthData, EncryptedData } from '../types/data.types';
 import { cryptoService } from '../services/crypto.service';
 import { databaseService } from '../services/database.service';
 import { oneDriveService } from '../services/onedrive.service';
@@ -32,6 +32,8 @@ interface AuthContextType {
   lock: () => Promise<void>;
   createAccount: (password: string, recoveryPhrase: string) => Promise<void>;
   reloadFromDatabase: () => Promise<void>; // Reload data from IndexedDB after sync
+  decryptBlob: (encryptedData: EncryptedData) => Promise<AppData>; // Decrypt an encrypted blob
+  encryptData: (data: AppData) => Promise<EncryptedData>; // Encrypt AppData
   changePassword: (currentPassword: string | null, newPassword: string, recoveryPhrase: string) => Promise<void>;
 
   // Biometric authentication
@@ -243,6 +245,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw err;
     }
   }, [password, isLocked]);
+
+  /**
+   * Decrypt an encrypted blob using the stored password
+   */
+  const decryptBlob = useCallback(
+    async (encryptedData: EncryptedData): Promise<AppData> => {
+      if (!password || isLocked) {
+        throw new Error('Cannot decrypt: app is locked');
+      }
+      const json = await cryptoService.decrypt(encryptedData, password);
+      return JSON.parse(json);
+    },
+    [password, isLocked]
+  );
+
+  /**
+   * Encrypt AppData using the stored password and salt
+   */
+  const encryptData = useCallback(
+    async (data: AppData): Promise<EncryptedData> => {
+      if (!password || isLocked) {
+        throw new Error('Cannot encrypt: app is locked');
+      }
+      const saltBase64 = await databaseService.getConfig('salt');
+      if (!saltBase64) {
+        throw new Error('Salt not found');
+      }
+      const salt = base64ToUint8Array(saltBase64);
+      return cryptoService.encrypt(JSON.stringify(data), password, salt);
+    },
+    [password, isLocked]
+  );
 
   /**
    * Create a new account (first-time setup)
@@ -646,6 +680,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lock,
         createAccount,
         reloadFromDatabase,
+        decryptBlob,
+        encryptData,
         changePassword,
         enableBiometric,
         disableBiometric,
