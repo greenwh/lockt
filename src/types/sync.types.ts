@@ -23,3 +23,23 @@ export interface ConflictResolution {
   localTimestamp: number;
   remoteTimestamp: number;
 }
+
+export type SyncLogAction =
+  | 'upload'
+  | 'download'
+  | 'conflict-resolved-local'
+  | 'conflict-resolved-remote'
+  | 'conflict-resolved-merge'
+  | 'auto-connect'
+  | 'error'
+  | 'force-upload'
+  | 'force-download';
+
+export interface SyncLogEntry {
+  id: string;
+  timestamp: number;
+  action: SyncLogAction;
+  deviceId: string;
+  summary: string;
+  error?: string;
+}

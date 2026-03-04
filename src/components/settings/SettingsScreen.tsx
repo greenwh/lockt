@@ -1,17 +1,30 @@
 // src/components/settings/SettingsScreen.tsx
 
-import React from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
 import ChangePasswordForm from './ChangePasswordForm';
 import BiometricSettings from './BiometricSettings';
+import SyncSettings from '../sync/SyncSettings';
+import SyncLog from '../sync/SyncLog';
 
 const SettingsScreen: React.FC = () => {
+  const [showSyncLog, setShowSyncLog] = useState(false);
+
   return (
     <Container>
       <Header>
         <Title>Settings</Title>
         <Subtitle>Manage your account security and preferences</Subtitle>
       </Header>
+
+      <Section>
+        <SectionTitle>Sync & Storage</SectionTitle>
+        <SyncSettings onClose={() => {}} />
+        <SyncLogToggle onClick={() => setShowSyncLog((prev) => !prev)}>
+          {showSyncLog ? 'Hide Sync History' : 'View Sync History'}
+        </SyncLogToggle>
+        {showSyncLog && <SyncLog />}
+      </Section>
 
       <Section>
         <SectionTitle>Biometric Authentication</SectionTitle>
@@ -60,4 +73,23 @@ const SectionTitle = styled.h2`
   margin: 0 0 20px 0;
   padding-bottom: 12px;
   border-bottom: 1px solid ${(props) => props.theme.colors.border};
+`;
+
+const SyncLogToggle = styled.button`
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  margin-top: 12px;
+  background: transparent;
+  color: ${(props) => props.theme.colors.primary};
+  border: 1px solid ${(props) => props.theme.colors.border};
+  border-radius: ${(props) => props.theme.borderRadius};
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: ${(props) => props.theme.colors.background};
+  }
 `;

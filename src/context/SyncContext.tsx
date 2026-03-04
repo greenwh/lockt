@@ -1,14 +1,19 @@
 // src/context/SyncContext.tsx
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { oneDriveService } from '../services/onedrive.service';
 import { syncService } from '../services/sync.service';
 import type { SyncState, SyncSettings } from '../types/sync.types';
+import type { AppData } from '../types/data.types';
 import type { AccountInfo } from '@azure/msal-browser';
 import ConflictResolutionDialog from '../components/sync/ConflictResolutionDialog';
+import ConflictMergeDialog from '../components/sync/ConflictMergeDialog';
 import { useToast } from '../hooks/useToast';
 import { getUserFriendlyErrorMessage } from '../utils/errorMessages';
 import { useAuth } from './AuthContext';
+import { syncLogService } from '../services/synclog.service';
+import { computeDiff, type DiffResult } from '../utils/diff.utils';
+import { databaseService } from '../services/database.service';
 
 interface SyncContextType {
   syncState: SyncState;
@@ -25,7 +30,7 @@ const SyncContext = createContext<SyncContextType | undefined>(undefined);
 
 export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const toast = useToast();
-  const { reloadFromDatabase } = useAuth();
+  const { reloadFromDatabase, decryptBlob, encryptData, isLocked } = useAuth();
   const [syncState, setSyncState] = useState<SyncState>({
     status: 'idle',
     lastSyncTime: null,
@@ -40,6 +45,14 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
     remoteData: any;
     remoteTimestamp: number;
   } | null>(null);
+  const [mergeData, setMergeData] = useState<{
+    localDecrypted: AppData;
+    remoteDecrypted: AppData;
+    localTimestamp: number;
+    remoteTimestamp: number;
+    diff: DiffResult;
+  } | null>(null);
+  const wasLockedRef = useRef(true);
 
   // Initialize sync service and check for existing session
   useEffect(() => {
@@ -172,6 +185,13 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
+        // Log sync success
+        if (result.action === 'upload') {
+          syncLogService.addEntry('upload', 'Uploaded to OneDrive');
+        } else if (result.action === 'download') {
+          syncLogService.addEntry('download', 'Downloaded from OneDrive');
+        }
+
         // Show success toast
         const actionLabel = result.action === 'upload' ? 'uploaded to' :
                            result.action === 'download' ? 'downloaded from' : 'synced with';
@@ -182,7 +202,7 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setSyncState((prev) => ({ ...prev, status: 'idle' }));
         }, 3000);
       } else if (result.action === 'conflict' && result.conflictData) {
-        // Store conflict data and show dialog
+        // Store conflict data
         setConflictData(result.conflictData);
         setSyncState((prev) => ({
           ...prev,
@@ -190,7 +210,27 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
           error: result.error || 'Sync conflict detected',
           isSyncing: false,
         }));
-        toast.warning('Sync conflict detected. Please choose a version to keep.');
+        syncLogService.addEntry('error', 'Sync conflict detected - awaiting resolution');
+
+        // Try to decrypt both sides for diff/merge view
+        try {
+          const [localDecrypted, remoteDecrypted] = await Promise.all([
+            decryptBlob(result.conflictData.localData),
+            decryptBlob(result.conflictData.remoteData),
+          ]);
+          const diff = computeDiff(localDecrypted, remoteDecrypted);
+          setMergeData({
+            localDecrypted,
+            remoteDecrypted,
+            localTimestamp: result.conflictData.localTimestamp,
+            remoteTimestamp: result.conflictData.remoteTimestamp,
+            diff,
+          });
+          toast.warning('Sync conflict detected. Review changes and choose what to keep.');
+        } catch (decryptErr) {
+          console.warn('Could not decrypt for merge view, falling back to simple dialog:', decryptErr);
+          toast.warning('Sync conflict detected. Please choose a version to keep.');
+        }
       } else {
         const friendlyMessage = getUserFriendlyErrorMessage(result.error || 'Sync failed');
         setSyncState((prev) => ({
@@ -206,11 +246,13 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (error) {
       console.error('Sync failed:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Sync failed';
       const friendlyMessage = getUserFriendlyErrorMessage(error);
+      syncLogService.addEntry('error', 'Sync failed', errorMsg);
       setSyncState((prev) => ({
         ...prev,
         status: 'error',
-        error: error instanceof Error ? error.message : 'Sync failed',
+        error: errorMsg,
         isSyncing: false,
       }));
       toast.error(friendlyMessage, 7000, {
@@ -218,7 +260,35 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
         onClick: () => performSync(),
       });
     }
-  }, [toast, reloadFromDatabase]);
+  }, [toast, reloadFromDatabase, decryptBlob]);
+
+  // Auto-connect to OneDrive on unlock transition
+  const trySilentConnect = useCallback(async () => {
+    try {
+      const account = await oneDriveService.trySilentSignIn();
+      if (account) {
+        setSyncState((prev) => ({
+          ...prev,
+          isOneDriveConnected: true,
+          accountName: account.username,
+        }));
+        syncLogService.addEntry('auto-connect', `Auto-connected as ${account.username}`);
+        const settings = await syncService.getSettings();
+        if (settings.syncOnStart) {
+          await performSync();
+        }
+      }
+    } catch {
+      // Silent failure — don't show errors for auto-connect
+    }
+  }, [performSync]);
+
+  useEffect(() => {
+    if (wasLockedRef.current && !isLocked) {
+      trySilentConnect();
+    }
+    wasLockedRef.current = isLocked;
+  }, [isLocked, trySilentConnect]);
 
   const forceUpload = useCallback(async () => {
     try {
@@ -228,6 +298,7 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (result.success) {
         const lastSyncTime = await syncService.getLastSyncTime();
+        syncLogService.addEntry('force-upload', 'Force uploaded to OneDrive');
         setSyncState((prev) => ({
           ...prev,
           status: 'success',
@@ -240,6 +311,7 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setSyncState((prev) => ({ ...prev, status: 'idle' }));
         }, 3000);
       } else {
+        syncLogService.addEntry('error', 'Force upload failed', result.error);
         setSyncState((prev) => ({
           ...prev,
           status: 'error',
@@ -249,10 +321,12 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (error) {
       console.error('Force upload failed:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Upload failed';
+      syncLogService.addEntry('error', 'Force upload failed', errorMsg);
       setSyncState((prev) => ({
         ...prev,
         status: 'error',
-        error: error instanceof Error ? error.message : 'Upload failed',
+        error: errorMsg,
         isSyncing: false,
       }));
     }
@@ -266,6 +340,7 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (result.success) {
         const lastSyncTime = await syncService.getLastSyncTime();
+        syncLogService.addEntry('force-download', 'Force downloaded from OneDrive');
         setSyncState((prev) => ({
           ...prev,
           status: 'success',
@@ -287,6 +362,7 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setSyncState((prev) => ({ ...prev, status: 'idle' }));
         }, 3000);
       } else {
+        syncLogService.addEntry('error', 'Force download failed', result.error);
         setSyncState((prev) => ({
           ...prev,
           status: 'error',
@@ -296,10 +372,12 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (error) {
       console.error('Force download failed:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Download failed';
+      syncLogService.addEntry('error', 'Force download failed', errorMsg);
       setSyncState((prev) => ({
         ...prev,
         status: 'error',
-        error: error instanceof Error ? error.message : 'Download failed',
+        error: errorMsg,
         isSyncing: false,
       }));
     }
@@ -340,8 +418,10 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Clear conflict data
           setConflictData(null);
 
-          // Show success toast
+          // Log and show success toast
+          const logAction = action === 'keep-local' ? 'conflict-resolved-local' as const : 'conflict-resolved-remote' as const;
           const actionLabel = action === 'keep-local' ? 'Local version uploaded' : 'Cloud version downloaded';
+          syncLogService.addEntry(logAction, `Conflict resolved: ${actionLabel}`);
           toast.success(`Conflict resolved: ${actionLabel}`);
 
           // If downloaded remote, reload from database to refresh UI
@@ -386,11 +466,70 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const handleConflictCancel = useCallback(() => {
     setConflictData(null);
+    setMergeData(null);
     setSyncState((prev) => ({
       ...prev,
       status: 'idle',
       error: null,
     }));
+  }, []);
+
+  const handleMergeResolve = useCallback(
+    async (mergedData: AppData) => {
+      try {
+        setSyncState((prev) => ({ ...prev, isSyncing: true, status: 'syncing' }));
+
+        // Encrypt merged data
+        const encrypted = await encryptData(mergedData);
+
+        // Save locally and upload
+        await databaseService.saveEncryptedData(encrypted);
+        await databaseService.setConfig('lastModified', Date.now());
+        await oneDriveService.uploadData(encrypted);
+        await databaseService.setConfig('lastSyncTime', Date.now());
+
+        // Reload UI
+        await reloadFromDatabase();
+
+        const diff = mergeData?.diff;
+        const summary = diff
+          ? `Merged: ${diff.summary.modified} resolved, ${diff.summary.added} new entries included`
+          : 'Conflict resolved via merge';
+        syncLogService.addEntry('conflict-resolved-merge', summary);
+
+        const lastSyncTime = await syncService.getLastSyncTime();
+        setSyncState((prev) => ({
+          ...prev,
+          status: 'success',
+          lastSyncTime,
+          error: null,
+          isSyncing: false,
+        }));
+
+        setConflictData(null);
+        setMergeData(null);
+        toast.success('Conflict resolved: Changes merged successfully');
+
+        setTimeout(() => {
+          setSyncState((prev) => ({ ...prev, status: 'idle' }));
+        }, 3000);
+      } catch (error) {
+        console.error('Merge resolution failed:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to apply merge';
+        setSyncState((prev) => ({
+          ...prev,
+          status: 'error',
+          error: errorMessage,
+          isSyncing: false,
+        }));
+        toast.error(errorMessage);
+      }
+    },
+    [encryptData, reloadFromDatabase, mergeData, toast]
+  );
+
+  const handleFallbackToSimple = useCallback(() => {
+    setMergeData(null);
   }, []);
 
   return (
@@ -407,7 +546,19 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }}
     >
       {children}
-      {conflictData && (
+      {conflictData && mergeData && (
+        <ConflictMergeDialog
+          localData={mergeData.localDecrypted}
+          remoteData={mergeData.remoteDecrypted}
+          localTimestamp={mergeData.localTimestamp}
+          remoteTimestamp={mergeData.remoteTimestamp}
+          diff={mergeData.diff}
+          onMerge={handleMergeResolve}
+          onCancel={handleConflictCancel}
+          onFallbackToSimple={handleFallbackToSimple}
+        />
+      )}
+      {conflictData && !mergeData && (
         <ConflictResolutionDialog
           localTimestamp={conflictData.localTimestamp}
           remoteTimestamp={conflictData.remoteTimestamp}
