@@ -127,11 +127,92 @@ export interface HealthJournalEntry {
   updatedAt: number;
 }
 
+export type MedicationType = 'prescription' | 'supplement' | 'otc';
+export type MedicationStatus = 'active' | 'planned' | 'prn' | 'not-taking';
+
+export interface HealthMedication {
+  id: string;
+  name: string;
+  dose: string;
+  frequency: string;
+  timing?: string;
+  type: MedicationType;
+  status: MedicationStatus;
+  purpose: string;
+  prescriber?: string;
+  interactionNotes?: string;
+  depletionNotes?: string;
+  startDate?: string;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface HealthDevice {
+  id: string;
+  deviceName: string;
+  manufacturer: string;
+  model: string;
+  serialNumber: string;
+  deviceType: string;
+  implantDate: string;
+  implantingPhysician: string;
+  implantLocation: string;
+  indication: string;
+  pacingMode: string;
+  lowerRate: number;
+  upperTrackingRate: number;
+  upperActivityRate?: number;
+  rvThreshold?: string;
+  rvSensing?: string;
+  impedance?: string;
+  batteryLife?: string;
+  lastCheck?: string;
+  lastRemoteUpload?: string;
+  mriCompatible: boolean;
+  medtronicRep?: string;
+  medtronicRepPhone?: string;
+  managingPhysician?: string;
+  managingPhysicianPhone?: string;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface HealthEmergency {
+  id: string;
+  fullName: string;
+  dateOfBirth: string;
+  bloodType?: string;
+  allergies: string;
+  emergencyContact1Name: string;
+  emergencyContact1Relationship: string;
+  emergencyContact1Phone: string;
+  emergencyContact2Name?: string;
+  emergencyContact2Relationship?: string;
+  emergencyContact2Phone?: string;
+  primaryCarePhysician: string;
+  primaryCarePhone: string;
+  insurancePrimary?: string;
+  insurancePrimaryId?: string;
+  insuranceSecondary?: string;
+  insuranceSecondaryId?: string;
+  advanceDirective?: boolean;
+  advanceDirectiveLocation?: string;
+  dnrStatus?: string;
+  specialInstructions?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface HealthData {
   providers: HealthProvider[];
   conditions: HealthCondition[];
   impairments: HealthImpairment[];
   journal: HealthJournalEntry[];
+  medications: HealthMedication[];
+  devices: HealthDevice[];
+  emergency: HealthEmergency | null;
 }
 
 export interface AppData {

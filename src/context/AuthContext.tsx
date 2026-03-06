@@ -307,9 +307,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             conditions: [],
             impairments: [],
             journal: [],
+            medications: [],
+            devices: [],
+            emergency: null,
           },
           metadata: {
-            version: 1,
+            version: 2,
             lastModified: Date.now(),
             deviceId,
           },
