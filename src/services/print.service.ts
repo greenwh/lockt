@@ -5,6 +5,7 @@ import type {
   HealthCondition,
   HealthImpairment,
   HealthJournalEntry,
+  HealthMedication,
 } from '../types/data.types';
 
 /**
@@ -440,10 +441,104 @@ const openPrintWindow = (html: string): void => {
   };
 };
 
+/**
+ * Generate print-friendly HTML for Health Medications
+ */
+export const printHealthMedications = (medications: HealthMedication[], title: string = 'Medications & Supplements'): void => {
+  const statusColors: Record<string, string> = {
+    active: '#155724',
+    planned: '#004085',
+    prn: '#856404',
+    'not-taking': '#383d41',
+  };
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>${escapeHtml(title)}</title>
+      <style>
+        ${getCommonStyles()}
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 20px;
+          font-size: 0.9em;
+        }
+        th, td {
+          border: 1px solid #ddd;
+          padding: 8px;
+          text-align: left;
+        }
+        th {
+          background: #007bff;
+          color: white;
+          font-weight: bold;
+        }
+        tr:nth-child(even) {
+          background: #f8f9fa;
+        }
+        .warning {
+          color: #856404;
+          font-weight: bold;
+        }
+        .status-badge {
+          display: inline-block;
+          padding: 2px 6px;
+          border-radius: 8px;
+          font-size: 0.85em;
+          font-weight: 600;
+        }
+      </style>
+    </head>
+    <body>
+      <h1>${escapeHtml(title)}</h1>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Dose</th>
+            <th>Frequency</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Purpose</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${medications.map(med => `
+            <tr>
+              <td>
+                ${med.interactionNotes?.includes('\u26A0\uFE0F') ? '<span class="warning">\u26A0\uFE0F</span> ' : ''}
+                <strong>${escapeHtml(med.name)}</strong>
+              </td>
+              <td>${escapeHtml(med.dose)}</td>
+              <td>${escapeHtml(med.frequency)}${med.timing ? '<br><em>' + escapeHtml(med.timing) + '</em>' : ''}</td>
+              <td>${escapeHtml(med.type)}</td>
+              <td style="color: ${statusColors[med.status] || '#333'}">${escapeHtml(med.status)}</td>
+              <td>${escapeHtml(med.purpose)}</td>
+              <td>
+                ${med.interactionNotes ? '<strong>Interactions:</strong> ' + escapeHtml(med.interactionNotes) + '<br>' : ''}
+                ${med.depletionNotes ? '<strong>Depletions:</strong> ' + escapeHtml(med.depletionNotes) : ''}
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      <div class="print-date">Printed on ${formatDate(Date.now())}</div>
+    </body>
+    </html>
+  `;
+
+  openPrintWindow(html);
+};
+
 export const printService = {
   printFreetextEntries,
   printHealthProviders,
   printHealthConditions,
   printHealthImpairments,
   printHealthJournal,
+  printHealthMedications,
 };

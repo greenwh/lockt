@@ -6,8 +6,11 @@ import ProviderList from './ProviderList';
 import ConditionList from './ConditionList';
 import ImpairmentList from './ImpairmentList';
 import JournalList from './JournalList';
+import MedicationList from './MedicationList';
+import DeviceList from './DeviceList';
+import EmergencyCard from './EmergencyCard';
 
-type HealthTab = 'providers' | 'conditions' | 'impairments' | 'journal';
+type HealthTab = 'providers' | 'conditions' | 'impairments' | 'journal' | 'medications' | 'devices' | 'emergency';
 
 const HealthTabs: React.FC = () => {
   const [activeTab, setActiveTab] = useState<HealthTab>('providers');
@@ -19,6 +22,9 @@ const HealthTabs: React.FC = () => {
     conditions: [],
     impairments: [],
     journal: [],
+    medications: [],
+    devices: [],
+    emergency: null,
   };
 
   // Ensure all properties are arrays (defensive against data structure corruption)
@@ -27,6 +33,9 @@ const HealthTabs: React.FC = () => {
     conditions: Array.isArray(healthData.conditions) ? healthData.conditions : [],
     impairments: Array.isArray(healthData.impairments) ? healthData.impairments : [],
     journal: Array.isArray(healthData.journal) ? healthData.journal : [],
+    medications: Array.isArray(healthData.medications) ? healthData.medications : [],
+    devices: Array.isArray(healthData.devices) ? healthData.devices : [],
+    emergency: healthData.emergency || null,
   };
 
   // Create handlers that always use the current healthData from the closure
@@ -37,6 +46,9 @@ const HealthTabs: React.FC = () => {
       conditions: [],
       impairments: [],
       journal: [],
+      medications: [],
+      devices: [],
+      emergency: null,
     };
     const newHealth = { ...currentHealth, ...updates };
     await updateHealth(newHealth);
@@ -84,6 +96,30 @@ const HealthTabs: React.FC = () => {
             setEntries={createSetEntries('journal')}
           />
         );
+      case 'medications':
+        return (
+          <MedicationList
+            entries={safeHealthData.medications}
+            setEntries={createSetEntries('medications')}
+          />
+        );
+      case 'devices':
+        return (
+          <DeviceList
+            entries={safeHealthData.devices}
+            setEntries={createSetEntries('devices')}
+          />
+        );
+      case 'emergency':
+        return (
+          <EmergencyCard
+            emergency={safeHealthData.emergency}
+            onUpdate={(emergency) => handleHealthUpdate({ emergency })}
+            conditions={safeHealthData.conditions}
+            medications={safeHealthData.medications}
+            devices={safeHealthData.devices}
+          />
+        );
       default:
         return (
           <ProviderList
@@ -110,6 +146,15 @@ const HealthTabs: React.FC = () => {
         <SubNavButton $isActive={activeTab === 'journal'} onClick={() => setActiveTab('journal')}>
           Journal
         </SubNavButton>
+        <SubNavButton $isActive={activeTab === 'medications'} onClick={() => setActiveTab('medications')}>
+          Medications
+        </SubNavButton>
+        <SubNavButton $isActive={activeTab === 'devices'} onClick={() => setActiveTab('devices')}>
+          Devices
+        </SubNavButton>
+        <SubNavButton $isActive={activeTab === 'emergency'} onClick={() => setActiveTab('emergency')}>
+          Emergency
+        </SubNavButton>
       </SubNavContainer>
       {renderContent()}
     </div>
@@ -117,4 +162,3 @@ const HealthTabs: React.FC = () => {
 };
 
 export default HealthTabs;
-

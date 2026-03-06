@@ -9,6 +9,11 @@ import type {
   HealthCondition,
   HealthImpairment,
   HealthJournalEntry,
+  HealthMedication,
+  HealthDevice,
+  HealthEmergency,
+  MedicationType,
+  MedicationStatus,
 } from '../types/data.types';
 
 /**
@@ -556,6 +561,243 @@ export const importHealthJournalFromCsv = (csvContent: string): HealthJournalEnt
   return entries;
 };
 
+// ===== HEALTH MEDICATIONS =====
+
+export const exportHealthMedicationsToCsv = (entries: HealthMedication[]): string => {
+  const headers = [
+    'Name', 'Dose', 'Frequency', 'Timing', 'Type', 'Status', 'Purpose',
+    'Prescriber', 'Interaction Notes', 'Depletion Notes', 'Start Date', 'Notes',
+    'Created At', 'Updated At',
+  ];
+
+  const rows = entries.map((entry) => [
+    escapeCsvField(entry.name),
+    escapeCsvField(entry.dose),
+    escapeCsvField(entry.frequency),
+    escapeCsvField(entry.timing),
+    escapeCsvField(entry.type),
+    escapeCsvField(entry.status),
+    escapeCsvField(entry.purpose),
+    escapeCsvField(entry.prescriber),
+    escapeCsvField(entry.interactionNotes),
+    escapeCsvField(entry.depletionNotes),
+    escapeCsvField(entry.startDate),
+    escapeCsvField(entry.notes),
+    escapeCsvField(new Date(entry.createdAt).toISOString()),
+    escapeCsvField(new Date(entry.updatedAt).toISOString()),
+  ]);
+
+  return [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+};
+
+export const importHealthMedicationsFromCsv = (csvContent: string): HealthMedication[] => {
+  const lines = csvContent.split('\n').filter((line) => line.trim());
+  if (lines.length < 2) throw new Error('CSV file is empty or has no data rows');
+
+  const entries: HealthMedication[] = [];
+  const validTypes: MedicationType[] = ['prescription', 'supplement', 'otc'];
+  const validStatuses: MedicationStatus[] = ['active', 'planned', 'prn', 'not-taking'];
+
+  for (let i = 1; i < lines.length; i++) {
+    const fields = parseCsvLine(lines[i]);
+    if (fields.length === 0 || fields.every((f) => !f)) continue;
+
+    const rawType = (fields[4] || 'prescription').toLowerCase() as MedicationType;
+    const rawStatus = (fields[5] || 'active').toLowerCase() as MedicationStatus;
+
+    const entry: HealthMedication = {
+      id: crypto.randomUUID(),
+      name: fields[0] || '',
+      dose: fields[1] || '',
+      frequency: fields[2] || '',
+      timing: fields[3] || undefined,
+      type: validTypes.includes(rawType) ? rawType : 'prescription',
+      status: validStatuses.includes(rawStatus) ? rawStatus : 'active',
+      purpose: fields[6] || '',
+      prescriber: fields[7] || undefined,
+      interactionNotes: fields[8] || undefined,
+      depletionNotes: fields[9] || undefined,
+      startDate: fields[10] || undefined,
+      notes: fields[11] || undefined,
+      createdAt: fields[12] ? new Date(fields[12]).getTime() : Date.now(),
+      updatedAt: fields[13] ? new Date(fields[13]).getTime() : Date.now(),
+    };
+
+    entries.push(entry);
+  }
+
+  return entries;
+};
+
+// ===== HEALTH DEVICES =====
+
+export const exportHealthDevicesToCsv = (entries: HealthDevice[]): string => {
+  const headers = [
+    'Device Name', 'Manufacturer', 'Model', 'Serial Number', 'Device Type',
+    'Implant Date', 'Implanting Physician', 'Implant Location', 'Indication',
+    'Pacing Mode', 'Lower Rate', 'Upper Tracking Rate', 'Upper Activity Rate',
+    'RV Threshold', 'RV Sensing', 'Impedance', 'Battery Life', 'Last Check',
+    'Last Remote Upload', 'MRI Compatible', 'Medtronic Rep', 'Medtronic Rep Phone',
+    'Managing Physician', 'Managing Physician Phone', 'Notes', 'Created At', 'Updated At',
+  ];
+
+  const rows = entries.map((entry) => [
+    escapeCsvField(entry.deviceName),
+    escapeCsvField(entry.manufacturer),
+    escapeCsvField(entry.model),
+    escapeCsvField(entry.serialNumber),
+    escapeCsvField(entry.deviceType),
+    escapeCsvField(entry.implantDate),
+    escapeCsvField(entry.implantingPhysician),
+    escapeCsvField(entry.implantLocation),
+    escapeCsvField(entry.indication),
+    escapeCsvField(entry.pacingMode),
+    escapeCsvField(entry.lowerRate),
+    escapeCsvField(entry.upperTrackingRate),
+    escapeCsvField(entry.upperActivityRate),
+    escapeCsvField(entry.rvThreshold),
+    escapeCsvField(entry.rvSensing),
+    escapeCsvField(entry.impedance),
+    escapeCsvField(entry.batteryLife),
+    escapeCsvField(entry.lastCheck),
+    escapeCsvField(entry.lastRemoteUpload),
+    escapeCsvField(entry.mriCompatible),
+    escapeCsvField(entry.medtronicRep),
+    escapeCsvField(entry.medtronicRepPhone),
+    escapeCsvField(entry.managingPhysician),
+    escapeCsvField(entry.managingPhysicianPhone),
+    escapeCsvField(entry.notes),
+    escapeCsvField(new Date(entry.createdAt).toISOString()),
+    escapeCsvField(new Date(entry.updatedAt).toISOString()),
+  ]);
+
+  return [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+};
+
+export const importHealthDevicesFromCsv = (csvContent: string): HealthDevice[] => {
+  const lines = csvContent.split('\n').filter((line) => line.trim());
+  if (lines.length < 2) throw new Error('CSV file is empty or has no data rows');
+
+  const entries: HealthDevice[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const fields = parseCsvLine(lines[i]);
+    if (fields.length === 0 || fields.every((f) => !f)) continue;
+
+    const entry: HealthDevice = {
+      id: crypto.randomUUID(),
+      deviceName: fields[0] || '',
+      manufacturer: fields[1] || '',
+      model: fields[2] || '',
+      serialNumber: fields[3] || '',
+      deviceType: fields[4] || '',
+      implantDate: fields[5] || '',
+      implantingPhysician: fields[6] || '',
+      implantLocation: fields[7] || '',
+      indication: fields[8] || '',
+      pacingMode: fields[9] || '',
+      lowerRate: fields[10] ? parseInt(fields[10], 10) : 0,
+      upperTrackingRate: fields[11] ? parseInt(fields[11], 10) : 0,
+      upperActivityRate: fields[12] ? parseInt(fields[12], 10) : undefined,
+      rvThreshold: fields[13] || undefined,
+      rvSensing: fields[14] || undefined,
+      impedance: fields[15] || undefined,
+      batteryLife: fields[16] || undefined,
+      lastCheck: fields[17] || undefined,
+      lastRemoteUpload: fields[18] || undefined,
+      mriCompatible: fields[19]?.toLowerCase() === 'true',
+      medtronicRep: fields[20] || undefined,
+      medtronicRepPhone: fields[21] || undefined,
+      managingPhysician: fields[22] || undefined,
+      managingPhysicianPhone: fields[23] || undefined,
+      notes: fields[24] || undefined,
+      createdAt: fields[25] ? new Date(fields[25]).getTime() : Date.now(),
+      updatedAt: fields[26] ? new Date(fields[26]).getTime() : Date.now(),
+    };
+
+    entries.push(entry);
+  }
+
+  return entries;
+};
+
+// ===== HEALTH EMERGENCY =====
+
+export const exportHealthEmergencyToCsv = (entry: HealthEmergency | null): string => {
+  const headers = [
+    'Full Name', 'Date of Birth', 'Blood Type', 'Allergies',
+    'Emergency Contact 1 Name', 'Emergency Contact 1 Relationship', 'Emergency Contact 1 Phone',
+    'Emergency Contact 2 Name', 'Emergency Contact 2 Relationship', 'Emergency Contact 2 Phone',
+    'Primary Care Physician', 'Primary Care Phone',
+    'Insurance Primary', 'Insurance Primary ID', 'Insurance Secondary', 'Insurance Secondary ID',
+    'Advance Directive', 'Advance Directive Location', 'DNR Status', 'Special Instructions',
+    'Created At', 'Updated At',
+  ];
+
+  if (!entry) return headers.join(',');
+
+  const row = [
+    escapeCsvField(entry.fullName),
+    escapeCsvField(entry.dateOfBirth),
+    escapeCsvField(entry.bloodType),
+    escapeCsvField(entry.allergies),
+    escapeCsvField(entry.emergencyContact1Name),
+    escapeCsvField(entry.emergencyContact1Relationship),
+    escapeCsvField(entry.emergencyContact1Phone),
+    escapeCsvField(entry.emergencyContact2Name),
+    escapeCsvField(entry.emergencyContact2Relationship),
+    escapeCsvField(entry.emergencyContact2Phone),
+    escapeCsvField(entry.primaryCarePhysician),
+    escapeCsvField(entry.primaryCarePhone),
+    escapeCsvField(entry.insurancePrimary),
+    escapeCsvField(entry.insurancePrimaryId),
+    escapeCsvField(entry.insuranceSecondary),
+    escapeCsvField(entry.insuranceSecondaryId),
+    escapeCsvField(entry.advanceDirective),
+    escapeCsvField(entry.advanceDirectiveLocation),
+    escapeCsvField(entry.dnrStatus),
+    escapeCsvField(entry.specialInstructions),
+    escapeCsvField(new Date(entry.createdAt).toISOString()),
+    escapeCsvField(new Date(entry.updatedAt).toISOString()),
+  ];
+
+  return [headers.join(','), row.join(',')].join('\n');
+};
+
+export const importHealthEmergencyFromCsv = (csvContent: string): HealthEmergency | null => {
+  const lines = csvContent.split('\n').filter((line) => line.trim());
+  if (lines.length < 2) throw new Error('CSV file is empty or has no data rows');
+
+  const fields = parseCsvLine(lines[1]);
+  if (fields.length === 0 || fields.every((f) => !f)) return null;
+
+  return {
+    id: crypto.randomUUID(),
+    fullName: fields[0] || '',
+    dateOfBirth: fields[1] || '',
+    bloodType: fields[2] || undefined,
+    allergies: fields[3] || 'NKA',
+    emergencyContact1Name: fields[4] || '',
+    emergencyContact1Relationship: fields[5] || '',
+    emergencyContact1Phone: fields[6] || '',
+    emergencyContact2Name: fields[7] || undefined,
+    emergencyContact2Relationship: fields[8] || undefined,
+    emergencyContact2Phone: fields[9] || undefined,
+    primaryCarePhysician: fields[10] || '',
+    primaryCarePhone: fields[11] || '',
+    insurancePrimary: fields[12] || undefined,
+    insurancePrimaryId: fields[13] || undefined,
+    insuranceSecondary: fields[14] || undefined,
+    insuranceSecondaryId: fields[15] || undefined,
+    advanceDirective: fields[16]?.toLowerCase() === 'true' ? true : fields[16]?.toLowerCase() === 'false' ? false : undefined,
+    advanceDirectiveLocation: fields[17] || undefined,
+    dnrStatus: fields[18] || undefined,
+    specialInstructions: fields[19] || undefined,
+    createdAt: fields[20] ? new Date(fields[20]).getTime() : Date.now(),
+    updatedAt: fields[21] ? new Date(fields[21]).getTime() : Date.now(),
+  };
+};
+
 // ===== UTILITY FUNCTIONS =====
 
 /**
@@ -600,6 +842,9 @@ export const csvService = {
   exportHealthConditionsToCsv,
   exportHealthImpairmentsToCsv,
   exportHealthJournalToCsv,
+  exportHealthMedicationsToCsv,
+  exportHealthDevicesToCsv,
+  exportHealthEmergencyToCsv,
 
   // Import functions
   importPasswordsFromCsv,
@@ -610,6 +855,9 @@ export const csvService = {
   importHealthConditionsFromCsv,
   importHealthImpairmentsFromCsv,
   importHealthJournalFromCsv,
+  importHealthMedicationsFromCsv,
+  importHealthDevicesFromCsv,
+  importHealthEmergencyFromCsv,
 
   // Utility functions
   downloadCsv,
