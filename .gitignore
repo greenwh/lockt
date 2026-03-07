@@ -24,3 +24,4 @@ archive/
 *.sln
 *.sw?
 data/
+!src/data/

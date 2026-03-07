@@ -14,6 +14,22 @@ import type {
   HealthEmergency,
   MedicationType,
   MedicationStatus,
+  VSOClaim,
+  VSOClaimType,
+  VSOClaimTrack,
+  VSOClaimStatus,
+  VSOEvidence,
+  VSOEvidenceType,
+  VSOEvidenceStatus,
+  VSOEvidencePriority,
+  VSOAction,
+  VSOActionPhase,
+  VSOActionPriority,
+  VSOActionStatus,
+  VSOExposure,
+  VSOExposureType,
+  VSORating,
+  VSOCurrentlyMet,
 } from '../types/data.types';
 
 /**
@@ -798,6 +814,357 @@ export const importHealthEmergencyFromCsv = (csvContent: string): HealthEmergenc
   };
 };
 
+// ===== VSO CLAIMS =====
+
+export const exportVSOClaimsToCsv = (entries: VSOClaim[]): string => {
+  const headers = [
+    'Claim Name', 'Condition Claimed', 'ICD-10', 'Diagnostic Code', 'Claim Type',
+    'Claim Track', 'Status', 'Theory of Connection', 'Alternative Theory', 'In-Service Event',
+    'Estimated Rating', 'Current Rating', 'Effective Date', 'Intent to File Date', 'Filing Date',
+    'Filing Deadline', 'Rating Decision Date', 'Linked Condition IDs', 'Assigned VSO', 'Notes',
+    'Created At', 'Updated At',
+  ];
+
+  const rows = entries.map((entry) => [
+    escapeCsvField(entry.claimName),
+    escapeCsvField(entry.conditionClaimed),
+    escapeCsvField(entry.icd10),
+    escapeCsvField(entry.diagnosticCode),
+    escapeCsvField(entry.claimType),
+    escapeCsvField(entry.claimTrack),
+    escapeCsvField(entry.status),
+    escapeCsvField(entry.theoryOfConnection),
+    escapeCsvField(entry.alternativeTheory),
+    escapeCsvField(entry.inServiceEvent),
+    escapeCsvField(entry.estimatedRating),
+    escapeCsvField(entry.currentRating),
+    escapeCsvField(entry.effectiveDate),
+    escapeCsvField(entry.intentToFileDate),
+    escapeCsvField(entry.filingDate),
+    escapeCsvField(entry.filingDeadline),
+    escapeCsvField(entry.ratingDecisionDate),
+    escapeCsvField(entry.linkedConditionIds),
+    escapeCsvField(entry.assignedVSO),
+    escapeCsvField(entry.notes),
+    escapeCsvField(new Date(entry.createdAt).toISOString()),
+    escapeCsvField(new Date(entry.updatedAt).toISOString()),
+  ]);
+
+  return [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+};
+
+export const importVSOClaimsFromCsv = (csvContent: string): VSOClaim[] => {
+  const lines = csvContent.split('\n').filter((line) => line.trim());
+  if (lines.length < 2) throw new Error('CSV file is empty or has no data rows');
+
+  const entries: VSOClaim[] = [];
+  const validTypes: VSOClaimType[] = ['direct', 'secondary', 'presumptive', 'aggravation', 'increase'];
+  const validTracks: VSOClaimTrack[] = ['cervical-spine', 'secondary-conditions', 'tera-toxic-exposure', 'mental-health', 'rating-increase'];
+  const validStatuses: VSOClaimStatus[] = ['planning', 'intent-filed', 'filed', 'pending-development', 'c-and-p-scheduled', 'c-and-p-completed', 'rating-decision', 'appealing', 'granted', 'denied'];
+
+  for (let i = 1; i < lines.length; i++) {
+    const fields = parseCsvLine(lines[i]);
+    if (fields.length === 0 || fields.every((f) => !f)) continue;
+
+    const rawType = (fields[4] || 'direct').toLowerCase() as VSOClaimType;
+    const rawTrack = (fields[5] || 'tera-toxic-exposure').toLowerCase() as VSOClaimTrack;
+    const rawStatus = (fields[6] || 'planning').toLowerCase() as VSOClaimStatus;
+
+    const entry: VSOClaim = {
+      id: crypto.randomUUID(),
+      claimName: fields[0] || '',
+      conditionClaimed: fields[1] || '',
+      icd10: fields[2] || '',
+      diagnosticCode: fields[3] || '',
+      claimType: validTypes.includes(rawType) ? rawType : 'direct',
+      claimTrack: validTracks.includes(rawTrack) ? rawTrack : 'tera-toxic-exposure',
+      status: validStatuses.includes(rawStatus) ? rawStatus : 'planning',
+      theoryOfConnection: fields[7] || '',
+      alternativeTheory: fields[8] || undefined,
+      inServiceEvent: fields[9] || '',
+      estimatedRating: fields[10] || undefined,
+      currentRating: fields[11] || undefined,
+      effectiveDate: fields[12] || undefined,
+      intentToFileDate: fields[13] || undefined,
+      filingDate: fields[14] || undefined,
+      filingDeadline: fields[15] || undefined,
+      ratingDecisionDate: fields[16] || undefined,
+      linkedConditionIds: fields[17] || undefined,
+      assignedVSO: fields[18] || undefined,
+      notes: fields[19] || undefined,
+      createdAt: fields[20] ? new Date(fields[20]).getTime() : Date.now(),
+      updatedAt: fields[21] ? new Date(fields[21]).getTime() : Date.now(),
+    };
+
+    entries.push(entry);
+  }
+
+  return entries;
+};
+
+// ===== VSO EVIDENCE =====
+
+export const exportVSOEvidenceToCsv = (entries: VSOEvidence[]): string => {
+  const headers = [
+    'Evidence Name', 'Evidence Type', 'Status', 'Priority', 'Linked Claim Names', 'Source',
+    'Date of Evidence', 'Date Obtained', 'Date Submitted', 'Description', 'Relevance Notes',
+    'Location', 'Gap Notes', 'Notes', 'Created At', 'Updated At',
+  ];
+
+  const rows = entries.map((entry) => [
+    escapeCsvField(entry.evidenceName),
+    escapeCsvField(entry.evidenceType),
+    escapeCsvField(entry.status),
+    escapeCsvField(entry.priority),
+    escapeCsvField(entry.linkedClaimNames),
+    escapeCsvField(entry.source),
+    escapeCsvField(entry.dateOfEvidence),
+    escapeCsvField(entry.dateObtained),
+    escapeCsvField(entry.dateSubmitted),
+    escapeCsvField(entry.description),
+    escapeCsvField(entry.relevanceNotes),
+    escapeCsvField(entry.location),
+    escapeCsvField(entry.gapNotes),
+    escapeCsvField(entry.notes),
+    escapeCsvField(new Date(entry.createdAt).toISOString()),
+    escapeCsvField(new Date(entry.updatedAt).toISOString()),
+  ]);
+
+  return [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+};
+
+export const importVSOEvidenceFromCsv = (csvContent: string): VSOEvidence[] => {
+  const lines = csvContent.split('\n').filter((line) => line.trim());
+  if (lines.length < 2) throw new Error('CSV file is empty or has no data rows');
+
+  const entries: VSOEvidence[] = [];
+  const validTypes: VSOEvidenceType[] = ['medical-record', 'imaging', 'lab-result', 'pft', 'personal-statement', 'buddy-statement', 'nexus-opinion', 'military-record', 'va-record', 'research-literature', 'va-form', 'other'];
+  const validStatuses: VSOEvidenceStatus[] = ['obtained', 'pending-request', 'needed', 'in-progress', 'submitted-to-va'];
+  const validPriorities: VSOEvidencePriority[] = ['critical', 'high', 'moderate', 'low'];
+
+  for (let i = 1; i < lines.length; i++) {
+    const fields = parseCsvLine(lines[i]);
+    if (fields.length === 0 || fields.every((f) => !f)) continue;
+
+    const rawType = (fields[1] || 'other').toLowerCase() as VSOEvidenceType;
+    const rawStatus = (fields[2] || 'needed').toLowerCase() as VSOEvidenceStatus;
+    const rawPriority = (fields[3] || 'moderate').toLowerCase() as VSOEvidencePriority;
+
+    const entry: VSOEvidence = {
+      id: crypto.randomUUID(),
+      evidenceName: fields[0] || '',
+      evidenceType: validTypes.includes(rawType) ? rawType : 'other',
+      status: validStatuses.includes(rawStatus) ? rawStatus : 'needed',
+      priority: validPriorities.includes(rawPriority) ? rawPriority : 'moderate',
+      linkedClaimNames: fields[4] || '',
+      source: fields[5] || '',
+      dateOfEvidence: fields[6] || undefined,
+      dateObtained: fields[7] || undefined,
+      dateSubmitted: fields[8] || undefined,
+      description: fields[9] || '',
+      relevanceNotes: fields[10] || undefined,
+      location: fields[11] || undefined,
+      gapNotes: fields[12] || undefined,
+      notes: fields[13] || undefined,
+      createdAt: fields[14] ? new Date(fields[14]).getTime() : Date.now(),
+      updatedAt: fields[15] ? new Date(fields[15]).getTime() : Date.now(),
+    };
+
+    entries.push(entry);
+  }
+
+  return entries;
+};
+
+// ===== VSO ACTIONS =====
+
+export const exportVSOActionsToCsv = (entries: VSOAction[]): string => {
+  const headers = [
+    'Action Item', 'Phase', 'Priority', 'Status', 'Due Date', 'Completed Date',
+    'Linked Claim Names', 'Linked Evidence Names', 'Depends On', 'Assigned To', 'Notes',
+    'Created At', 'Updated At',
+  ];
+
+  const rows = entries.map((entry) => [
+    escapeCsvField(entry.actionItem),
+    escapeCsvField(entry.phase),
+    escapeCsvField(entry.priority),
+    escapeCsvField(entry.status),
+    escapeCsvField(entry.dueDate),
+    escapeCsvField(entry.completedDate),
+    escapeCsvField(entry.linkedClaimNames),
+    escapeCsvField(entry.linkedEvidenceNames),
+    escapeCsvField(entry.dependsOn),
+    escapeCsvField(entry.assignedTo),
+    escapeCsvField(entry.notes),
+    escapeCsvField(new Date(entry.createdAt).toISOString()),
+    escapeCsvField(new Date(entry.updatedAt).toISOString()),
+  ]);
+
+  return [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+};
+
+export const importVSOActionsFromCsv = (csvContent: string): VSOAction[] => {
+  const lines = csvContent.split('\n').filter((line) => line.trim());
+  if (lines.length < 2) throw new Error('CSV file is empty or has no data rows');
+
+  const entries: VSOAction[] = [];
+  const validPhases: VSOActionPhase[] = ['phase-1-foundation', 'phase-2-evidence', 'phase-3-nexus', 'phase-4-filing', 'ongoing'];
+  const validPriorities: VSOActionPriority[] = ['critical', 'high', 'moderate', 'low'];
+  const validStatuses: VSOActionStatus[] = ['not-started', 'in-progress', 'blocked', 'completed'];
+
+  for (let i = 1; i < lines.length; i++) {
+    const fields = parseCsvLine(lines[i]);
+    if (fields.length === 0 || fields.every((f) => !f)) continue;
+
+    const rawPhase = (fields[1] || 'phase-1-foundation').toLowerCase() as VSOActionPhase;
+    const rawPriority = (fields[2] || 'moderate').toLowerCase() as VSOActionPriority;
+    const rawStatus = (fields[3] || 'not-started').toLowerCase() as VSOActionStatus;
+
+    const entry: VSOAction = {
+      id: crypto.randomUUID(),
+      actionItem: fields[0] || '',
+      phase: validPhases.includes(rawPhase) ? rawPhase : 'phase-1-foundation',
+      priority: validPriorities.includes(rawPriority) ? rawPriority : 'moderate',
+      status: validStatuses.includes(rawStatus) ? rawStatus : 'not-started',
+      dueDate: fields[4] || undefined,
+      completedDate: fields[5] || undefined,
+      linkedClaimNames: fields[6] || undefined,
+      linkedEvidenceNames: fields[7] || undefined,
+      dependsOn: fields[8] || undefined,
+      assignedTo: fields[9] || undefined,
+      notes: fields[10] || undefined,
+      createdAt: fields[11] ? new Date(fields[11]).getTime() : Date.now(),
+      updatedAt: fields[12] ? new Date(fields[12]).getTime() : Date.now(),
+    };
+
+    entries.push(entry);
+  }
+
+  return entries;
+};
+
+// ===== VSO EXPOSURES =====
+
+export const exportVSOExposuresToCsv = (entries: VSOExposure[]): string => {
+  const headers = [
+    'Exposure Type', 'Substance', 'Weapon System', 'MOS at Time of Exposure', 'Description',
+    'Frequency', 'Duration', 'PPE Provided', 'Health Effect Pathway', 'Linked Claim Names',
+    'Witness Available', 'Notes', 'Created At', 'Updated At',
+  ];
+
+  const rows = entries.map((entry) => [
+    escapeCsvField(entry.exposureType),
+    escapeCsvField(entry.substance),
+    escapeCsvField(entry.weaponSystem),
+    escapeCsvField(entry.mosAtTimeOfExposure),
+    escapeCsvField(entry.description),
+    escapeCsvField(entry.frequency),
+    escapeCsvField(entry.duration),
+    escapeCsvField(entry.ppeProvided),
+    escapeCsvField(entry.healthEffectPathway),
+    escapeCsvField(entry.linkedClaimNames),
+    escapeCsvField(entry.witnessAvailable),
+    escapeCsvField(entry.notes),
+    escapeCsvField(new Date(entry.createdAt).toISOString()),
+    escapeCsvField(new Date(entry.updatedAt).toISOString()),
+  ]);
+
+  return [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+};
+
+export const importVSOExposuresFromCsv = (csvContent: string): VSOExposure[] => {
+  const lines = csvContent.split('\n').filter((line) => line.trim());
+  if (lines.length < 2) throw new Error('CSV file is empty or has no data rows');
+
+  const entries: VSOExposure[] = [];
+  const validTypes: VSOExposureType[] = ['rf-radiation', 'chemical', 'fuel', 'paint', 'solvent', 'particulate', 'noise', 'nuclear', 'other'];
+
+  for (let i = 1; i < lines.length; i++) {
+    const fields = parseCsvLine(lines[i]);
+    if (fields.length === 0 || fields.every((f) => !f)) continue;
+
+    const rawType = (fields[0] || 'other').toLowerCase() as VSOExposureType;
+
+    const entry: VSOExposure = {
+      id: crypto.randomUUID(),
+      exposureType: validTypes.includes(rawType) ? rawType : 'other',
+      substance: fields[1] || '',
+      weaponSystem: fields[2] || '',
+      mosAtTimeOfExposure: fields[3] || undefined,
+      description: fields[4] || '',
+      frequency: fields[5] || '',
+      duration: fields[6] || '',
+      ppeProvided: fields[7] || '',
+      healthEffectPathway: fields[8] || undefined,
+      linkedClaimNames: fields[9] || '',
+      witnessAvailable: fields[10]?.toLowerCase() === 'true' ? true : undefined,
+      notes: fields[11] || undefined,
+      createdAt: fields[12] ? new Date(fields[12]).getTime() : Date.now(),
+      updatedAt: fields[13] ? new Date(fields[13]).getTime() : Date.now(),
+    };
+
+    entries.push(entry);
+  }
+
+  return entries;
+};
+
+// ===== VSO RATINGS =====
+
+export const exportVSORatingsToCsv = (entries: VSORating[]): string => {
+  const headers = [
+    'Diagnostic Code', 'Condition Name', 'Rating Percent', 'Criteria', 'Currently Met',
+    'Veteran Evidence', 'Notes', 'Created At', 'Updated At',
+  ];
+
+  const rows = entries.map((entry) => [
+    escapeCsvField(entry.diagnosticCode),
+    escapeCsvField(entry.conditionName),
+    escapeCsvField(entry.ratingPercent),
+    escapeCsvField(entry.criteria),
+    escapeCsvField(entry.currentlyMet),
+    escapeCsvField(entry.veteranEvidence),
+    escapeCsvField(entry.notes),
+    escapeCsvField(new Date(entry.createdAt).toISOString()),
+    escapeCsvField(new Date(entry.updatedAt).toISOString()),
+  ]);
+
+  return [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+};
+
+export const importVSORatingsFromCsv = (csvContent: string): VSORating[] => {
+  const lines = csvContent.split('\n').filter((line) => line.trim());
+  if (lines.length < 2) throw new Error('CSV file is empty or has no data rows');
+
+  const entries: VSORating[] = [];
+  const validMet: VSOCurrentlyMet[] = ['met', 'partially-met', 'not-met', 'unknown-need-testing'];
+
+  for (let i = 1; i < lines.length; i++) {
+    const fields = parseCsvLine(lines[i]);
+    if (fields.length === 0 || fields.every((f) => !f)) continue;
+
+    const rawMet = (fields[4] || 'unknown-need-testing').toLowerCase() as VSOCurrentlyMet;
+
+    const entry: VSORating = {
+      id: crypto.randomUUID(),
+      diagnosticCode: fields[0] || '',
+      conditionName: fields[1] || '',
+      ratingPercent: fields[2] ? parseInt(fields[2], 10) : 0,
+      criteria: fields[3] || '',
+      currentlyMet: validMet.includes(rawMet) ? rawMet : 'unknown-need-testing',
+      veteranEvidence: fields[5] || undefined,
+      notes: fields[6] || undefined,
+      createdAt: fields[7] ? new Date(fields[7]).getTime() : Date.now(),
+      updatedAt: fields[8] ? new Date(fields[8]).getTime() : Date.now(),
+    };
+
+    entries.push(entry);
+  }
+
+  return entries;
+};
+
 // ===== UTILITY FUNCTIONS =====
 
 /**
@@ -858,6 +1225,20 @@ export const csvService = {
   importHealthMedicationsFromCsv,
   importHealthDevicesFromCsv,
   importHealthEmergencyFromCsv,
+
+  // VSO export functions
+  exportVSOClaimsToCsv,
+  exportVSOEvidenceToCsv,
+  exportVSOActionsToCsv,
+  exportVSOExposuresToCsv,
+  exportVSORatingsToCsv,
+
+  // VSO import functions
+  importVSOClaimsFromCsv,
+  importVSOEvidenceFromCsv,
+  importVSOActionsFromCsv,
+  importVSOExposuresFromCsv,
+  importVSORatingsFromCsv,
 
   // Utility functions
   downloadCsv,

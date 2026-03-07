@@ -205,6 +205,126 @@ export interface HealthEmergency {
   updatedAt: number;
 }
 
+// ===== VSO (Veterans Service Officer) CLAIMS TYPES =====
+
+export type VSOClaimType = 'direct' | 'secondary' | 'presumptive' | 'aggravation' | 'increase';
+export type VSOClaimTrack = 'cervical-spine' | 'secondary-conditions' | 'tera-toxic-exposure' | 'mental-health' | 'rating-increase';
+export type VSOClaimStatus = 'planning' | 'intent-filed' | 'filed' | 'pending-development' | 'c-and-p-scheduled' | 'c-and-p-completed' | 'rating-decision' | 'appealing' | 'granted' | 'denied';
+
+export interface VSOClaim {
+  id: string;
+  claimName: string;
+  conditionClaimed: string;
+  icd10: string;
+  diagnosticCode: string;
+  claimType: VSOClaimType;
+  claimTrack: VSOClaimTrack;
+  status: VSOClaimStatus;
+  theoryOfConnection: string;
+  alternativeTheory?: string;
+  inServiceEvent: string;
+  estimatedRating?: string;
+  currentRating?: string;
+  effectiveDate?: string;
+  intentToFileDate?: string;
+  filingDate?: string;
+  filingDeadline?: string;
+  ratingDecisionDate?: string;
+  linkedConditionIds?: string;
+  assignedVSO?: string;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type VSOEvidenceType = 'medical-record' | 'imaging' | 'lab-result' | 'pft' | 'personal-statement' | 'buddy-statement' | 'nexus-opinion' | 'military-record' | 'va-record' | 'research-literature' | 'va-form' | 'other';
+export type VSOEvidenceStatus = 'obtained' | 'pending-request' | 'needed' | 'in-progress' | 'submitted-to-va';
+export type VSOEvidencePriority = 'critical' | 'high' | 'moderate' | 'low';
+
+export interface VSOEvidence {
+  id: string;
+  evidenceName: string;
+  evidenceType: VSOEvidenceType;
+  status: VSOEvidenceStatus;
+  priority: VSOEvidencePriority;
+  linkedClaimNames: string;
+  source: string;
+  dateOfEvidence?: string;
+  dateObtained?: string;
+  dateSubmitted?: string;
+  description: string;
+  relevanceNotes?: string;
+  location?: string;
+  gapNotes?: string;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type VSOActionPhase = 'phase-1-foundation' | 'phase-2-evidence' | 'phase-3-nexus' | 'phase-4-filing' | 'ongoing';
+export type VSOActionPriority = 'critical' | 'high' | 'moderate' | 'low';
+export type VSOActionStatus = 'not-started' | 'in-progress' | 'blocked' | 'completed';
+
+export interface VSOAction {
+  id: string;
+  actionItem: string;
+  phase: VSOActionPhase;
+  priority: VSOActionPriority;
+  status: VSOActionStatus;
+  dueDate?: string;
+  completedDate?: string;
+  linkedClaimNames?: string;
+  linkedEvidenceNames?: string;
+  dependsOn?: string;
+  assignedTo?: string;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type VSOExposureType = 'rf-radiation' | 'chemical' | 'fuel' | 'paint' | 'solvent' | 'particulate' | 'noise' | 'nuclear' | 'other';
+
+export interface VSOExposure {
+  id: string;
+  exposureType: VSOExposureType;
+  substance: string;
+  weaponSystem: string;
+  mosAtTimeOfExposure?: string;
+  description: string;
+  frequency: string;
+  duration: string;
+  ppeProvided: string;
+  healthEffectPathway?: string;
+  linkedClaimNames: string;
+  witnessAvailable?: boolean;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type VSOCurrentlyMet = 'met' | 'partially-met' | 'not-met' | 'unknown-need-testing';
+
+export interface VSORating {
+  id: string;
+  diagnosticCode: string;
+  conditionName: string;
+  ratingPercent: number;
+  criteria: string;
+  currentlyMet: VSOCurrentlyMet;
+  veteranEvidence?: string;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface VSOData {
+  claims: VSOClaim[];
+  evidence: VSOEvidence[];
+  actions: VSOAction[];
+  exposures: VSOExposure[];
+  ratings: VSORating[];
+}
+
 export interface HealthData {
   providers: HealthProvider[];
   conditions: HealthCondition[];
@@ -213,6 +333,7 @@ export interface HealthData {
   medications: HealthMedication[];
   devices: HealthDevice[];
   emergency: HealthEmergency | null;
+  vso?: VSOData;
 }
 
 export interface AppData {
