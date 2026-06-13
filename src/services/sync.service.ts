@@ -68,25 +68,6 @@ class SyncService {
   }
 
   /**
-   * Check if error is retryable (for future use)
-   */
-  // @ts-expect-error - Method reserved for future selective retry logic
-  private isRetryableError(error: any): boolean {
-    // Don't retry conflicts (user must resolve)
-    if (error?.message?.includes('conflict')) {
-      return false;
-    }
-
-    // Don't retry auth errors (user must sign in)
-    if (error?.message?.includes('signed in') || error?.message?.includes('auth')) {
-      return false;
-    }
-
-    // Retry network errors, timeouts, server errors
-    return true;
-  }
-
-  /**
    * Perform full sync operation
    */
   async sync(): Promise<{

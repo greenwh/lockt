@@ -104,6 +104,9 @@ class DatabaseService {
     await this.init();
     await this.db!.clear('encrypted-data');
     await this.db!.clear('app-config');
+    // Also clear biometric credentials, which hold an encrypted copy of the
+    // master password — leaving these behind after a reset is a security leak.
+    await this.db!.clear('biometric-credentials');
 
     // Also clear salt backups
     await saltRecoveryService.clearAllBackups();

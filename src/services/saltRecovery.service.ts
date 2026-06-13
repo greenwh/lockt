@@ -244,7 +244,7 @@ class SaltRecoveryService {
    * Generate unique device ID
    */
   private generateDeviceId(): string {
-    return `device-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+    return `device-${Date.now()}-${crypto.randomUUID()}`;
   }
 
   /**

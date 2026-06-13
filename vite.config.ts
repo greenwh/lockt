@@ -4,6 +4,12 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
   base: '/lockt/',
+  // Strip console.log/debug/info from production builds so no diagnostic output
+  // (which historically included sensitive material) ships to users.
+  // console.warn and console.error are kept for production diagnostics.
+  esbuild: {
+    pure: ['console.log', 'console.debug', 'console.info'],
+  },
   plugins: [
     react(),
     VitePWA({

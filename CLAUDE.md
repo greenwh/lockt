@@ -565,14 +565,41 @@ await disableBiometric(credentialId);
 ## Security Notes
 
 **What is encrypted:**
-- All user data (passwords, cards, crypto, freetext, health)
+- All user data (passwords, cards, crypto, freetext, health, VSO)
 - Stored in IndexedDB as encrypted blob
 - Stored in OneDrive as encrypted blob
+- The **audit log** is also encrypted at rest with the master password (it
+  records vault-derived names). `auditLogService.setEncryptionContext()` is
+  called by AuthContext on unlock; the log is unreadable while locked.
 
 **What is NOT encrypted:**
 - Salt (needed for key derivation, stored in IndexedDB config)
 - App metadata (version, deviceId, timestamps)
 - MSAL tokens (handled by MSAL library in localStorage)
+- Sync log (operational metadata only — action type, deviceId, status — no vault content)
+
+**Biometric unlock (WebAuthn PRF):**
+- The master password is encrypted with an AES-GCM key derived (HKDF) from the
+  WebAuthn **PRF extension** output. The PRF secret is released by the
+  authenticator only after biometric verification and is **never stored**.
+- The values in the `biometric-credentials` store (credential id, public key,
+  prfSalt) are NOT sufficient to derive the key, so IndexedDB read access alone
+  cannot recover the master password.
+- PRF support is **required**: if a device/browser lacks PRF, enrollment is
+  refused (no insecure fallback). Password + recovery phrase always work.
+- Changing the password **clears all biometric credentials** — they would
+  otherwise decrypt to the old password, and only the current device's
+  authenticator is present to re-encrypt. Users re-enroll per device.
+- ⚠️ The PRF flow needs verification on real hardware (iOS Face ID, Windows
+  Hello, Android) before production reliance — it cannot be tested in CI.
+
+**⚠️ Never commit real personal data:** `src/data/vso-seed-data.ts` ships in the
+public client bundle and must contain only generic example data. (A prior
+version contained real medical/military records — do not reintroduce.)
+
+**Testing:** `npm run test` (Vitest). Crypto round-trip, recovery-phrase escrow,
+phrase validation, and conflict-merge logic are covered. Run before/after
+changes to crypto, sync, or merge code.
 
 **Key Security Properties:**
 - Zero-knowledge: OneDrive cannot decrypt data
@@ -672,7 +699,7 @@ See `PHASE_3A.md` for detailed plans to address remaining limitations.
 
 ## Notes for Future Sessions
 
-- This is a monorepo package at `packages/lockt/` within a larger `react-apps` workspace
+- This is a **standalone** Vite + React project (not a monorepo package). It lives at `/mnt/d/Development/lockt`.
 - Styling follows PayTrax aesthetic (sibling project)
 - Mobile-first design with iPhone as primary target
 - Phase 3 (OneDrive Sync) complete and working for multi-device scenarios

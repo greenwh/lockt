@@ -1,6 +1,8 @@
 // src/services/auditlog.service.ts
 
 import { databaseService } from './database.service';
+import { cryptoService } from './crypto.service';
+import type { EncryptedData } from '../types/data.types';
 
 export type AuditLogAction = 'added' | 'edited' | 'deleted';
 
@@ -125,7 +127,55 @@ export function detectChanges(
   return logEntries;
 }
 
+function isEncryptedData(value: unknown): value is EncryptedData {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'ciphertext' in value &&
+    'iv' in value &&
+    'salt' in value
+  );
+}
+
 class AuditLogService {
+  // In-memory encryption context, set by AuthContext on unlock and cleared on
+  // lock. The audit log records vault-derived names (account names, medical
+  // conditions, etc.), so it is encrypted at rest with the master password
+  // rather than stored as plaintext in app-config.
+  private encPassword: string | null = null;
+  private encSalt: Uint8Array | null = null;
+
+  setEncryptionContext(password: string, saltBase64: string): void {
+    this.encPassword = password;
+    const binary = atob(saltBase64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    this.encSalt = bytes;
+  }
+
+  clearEncryptionContext(): void {
+    this.encPassword = null;
+    this.encSalt = null;
+  }
+
+  /**
+   * Re-encrypt the existing audit log under a new password/salt (password change).
+   * Must be called while the OLD encryption context is still active so the
+   * current entries can be read before switching keys.
+   */
+  async rekey(newPassword: string, newSaltBase64: string): Promise<void> {
+    const existing = await this.getEntries(); // reads under current (old) context
+    this.setEncryptionContext(newPassword, newSaltBase64);
+    if (existing.length > 0) {
+      const encrypted = await cryptoService.encrypt(
+        JSON.stringify(existing),
+        newPassword,
+        this.encSalt ?? undefined
+      );
+      await databaseService.setConfig(AUDIT_LOG_KEY, encrypted);
+    }
+  }
+
   async addEntry(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>): Promise<void> {
     const fullEntry: AuditLogEntry = {
       ...entry,
@@ -141,7 +191,20 @@ class AuditLogService {
       const entries = await this.getEntries();
       entries.unshift(...newEntries);
       const pruned = entries.slice(0, MAX_ENTRIES);
-      await databaseService.setConfig(AUDIT_LOG_KEY, pruned);
+
+      if (this.encPassword) {
+        // Encrypt the whole log blob with the master password.
+        const encrypted = await cryptoService.encrypt(
+          JSON.stringify(pruned),
+          this.encPassword,
+          this.encSalt ?? undefined
+        );
+        await databaseService.setConfig(AUDIT_LOG_KEY, encrypted);
+      } else {
+        // No encryption context (should not happen while unlocked). Avoid
+        // persisting sensitive names in plaintext — drop rather than leak.
+        console.warn('Audit log: no encryption context, entries not persisted');
+      }
     } catch (err) {
       console.error('Failed to add audit log entries:', err);
     }
@@ -149,8 +212,19 @@ class AuditLogService {
 
   async getEntries(): Promise<AuditLogEntry[]> {
     try {
-      const entries = await databaseService.getConfig(AUDIT_LOG_KEY);
-      return Array.isArray(entries) ? entries : [];
+      const stored = await databaseService.getConfig(AUDIT_LOG_KEY);
+      if (!stored) return [];
+
+      // Encrypted blob (current format)
+      if (isEncryptedData(stored)) {
+        if (!this.encPassword) return []; // Locked: cannot read
+        const json = await cryptoService.decrypt(stored, this.encPassword);
+        const parsed = JSON.parse(json);
+        return Array.isArray(parsed) ? parsed : [];
+      }
+
+      // Legacy plaintext array — readable, will be re-saved encrypted on next write
+      return Array.isArray(stored) ? stored : [];
     } catch {
       return [];
     }

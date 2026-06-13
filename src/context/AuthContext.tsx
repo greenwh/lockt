@@ -196,6 +196,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setPassword(actualPassword); // Store password for re-encryption on data changes
         setUnlockedViaRecovery(isRecoveryMode); // Track unlock method
         setIsLocked(false);
+
+        // Provide the encrypted audit log with a key so it can decrypt/append
+        const saltForLog = await databaseService.getConfig('salt');
+        if (saltForLog) auditLogService.setEncryptionContext(actualPassword, saltForLog);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unlock failed';
         setError(message);
@@ -214,6 +218,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUnlockedViaRecovery(false); // Reset unlock method
     setIsLocked(true);
     setError(null);
+    auditLogService.clearEncryptionContext(); // Audit log no longer readable while locked
   }, []);
 
   /**
@@ -345,6 +350,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setAppData(initialData);
         setPassword(password); // Store password for later re-encryption
         setIsLocked(false);
+        auditLogService.setEncryptionContext(password, encryptedData.salt);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Account creation failed';
         setError(message);
@@ -368,11 +374,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Authenticate with WebAuthn and decrypt password
-      const password = await webAuthnService.authenticateAndDecrypt(credentials);
+      const { password, credentialId } = await webAuthnService.authenticateAndDecrypt(credentials);
 
-      // Update last used timestamp
-      const firstCredential = credentials[0];
-      await databaseService.updateCredentialLastUsed(firstCredential.id);
+      // Update last used timestamp on the credential that actually authenticated
+      await databaseService.updateCredentialLastUsed(credentialId);
 
       // Use decrypted password to unlock (calls existing unlock flow)
       await unlock(password);
@@ -543,29 +548,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Update in-memory password
         setPassword(newPassword);
+        // Audit log was encrypted under the old password/salt — re-encrypt it
+        // under the new key (preserves history). Old context is still active here.
+        await auditLogService.rekey(newPassword, newEncryptedData.salt);
 
-        // Re-encrypt all biometric credentials with new password
-        const biometricCredentials = await databaseService.getBiometricCredentials();
-        if (biometricCredentials.length > 0) {
-          console.log('ChangePassword: Re-encrypting', biometricCredentials.length, 'biometric credentials');
-
-          for (const credential of biometricCredentials) {
-            // Re-encrypt password with same credential ID
-            const newEncryptedPassword = await webAuthnService.reencryptPassword(
-              newPassword,
-              credential.id
-            );
-
-            // Keep the same credential ID and metadata, just update encrypted password
-            const reencryptedCredential: BiometricCredential = {
-              ...credential,
-              encryptedPassword: newEncryptedPassword,
-            };
-
-            await databaseService.saveBiometricCredential(reencryptedCredential);
-          }
-
-          console.log('ChangePassword: Biometric credentials re-encrypted successfully');
+        // Biometric credentials store an encrypted copy of the master password,
+        // keyed to a specific device's authenticator. After a password change
+        // they would decrypt to the OLD password, and only the current device's
+        // authenticator is present to re-encrypt — so clear them all. The user
+        // re-enables biometric unlock per device (a quick, one-time re-enroll).
+        const hadBiometric = await databaseService.hasBiometricCredentials();
+        if (hadBiometric) {
+          await databaseService.clearBiometricCredentials();
+          setHasBiometricEnabled(false);
+          console.log('ChangePassword: Cleared biometric credentials (re-enroll required)');
         }
 
         console.log('ChangePassword: Password changed successfully');

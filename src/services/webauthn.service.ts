@@ -4,26 +4,43 @@ import type { EncryptedData } from '../types/data.types';
 
 /**
  * WebAuthn Credential stored in IndexedDB
+ *
+ * SECURITY MODEL (v2 - PRF based):
+ * The master password is encrypted with an AES-GCM key derived from the
+ * WebAuthn PRF (Pseudo-Random Function) extension output. The PRF output is a
+ * stable, high-entropy secret that the authenticator only releases AFTER a
+ * successful biometric/user-verification check, and it is NEVER stored on disk.
+ *
+ * Crucially, the values stored here (credential id, public key, prfSalt) are
+ * NOT sufficient to derive the encryption key — an attacker with full read
+ * access to IndexedDB still cannot decrypt `encryptedPassword` without passing
+ * the biometric check on the authenticator. This is the property the previous
+ * (credential-id-derived) scheme lacked.
  */
 export interface BiometricCredential {
   id: string; // Base64-encoded credential ID
-  publicKey: string; // Base64-encoded public key
-  encryptedPassword: EncryptedData; // Password encrypted with credential-derived key
+  publicKey: string; // Base64-encoded public key (informational)
+  encryptedPassword: EncryptedData; // Password encrypted with PRF-derived key
+  /**
+   * Per-credential salt fed to the PRF as its `first` input. Not secret — it
+   * only personalizes the PRF output per credential. Absent on legacy (v1)
+   * credentials, which are rejected and must be re-enrolled.
+   */
+  prfSalt?: string; // Base64-encoded
   deviceName: string; // User-friendly device label
-  authenticatorType: 'platform' | 'cross-platform'; // Face ID, Touch ID, Windows Hello, etc.
+  authenticatorType: 'platform' | 'cross-platform';
   createdAt: number;
   lastUsedAt: number;
 }
 
 /**
  * WebAuthn Service
- * Handles biometric authentication using WebAuthn/Passkeys API
+ * Handles biometric authentication using the WebAuthn PRF extension.
  */
 class WebAuthnService {
   private readonly RP_NAME = 'Lockt';
   private readonly RP_ID = window.location.hostname;
-  private readonly PBKDF2_ITERATIONS = 100000; // Iterations for credential ID key derivation
-  private readonly KEY_LENGTH = 256;
+  private readonly HKDF_INFO = 'lockt-biometric-prf-v2';
 
   /**
    * Check if WebAuthn is supported in this browser
@@ -98,95 +115,97 @@ class WebAuthnService {
   }
 
   /**
-   * Derive encryption key from credential ID
-   * This allows us to encrypt/decrypt the password using the credential ID as key material
+   * Derive an AES-GCM key from a PRF output using HKDF.
+   * The PRF output is high-entropy (>= 32 bytes), so HKDF (not PBKDF2) is the
+   * correct KDF here — no iteration count is needed for non-password inputs.
    */
-  private async deriveKeyFromCredentialId(
-    credentialId: string,
-    salt: Uint8Array
+  private async deriveKeyFromPrf(
+    prfOutput: ArrayBuffer,
+    hkdfSalt: Uint8Array
   ): Promise<CryptoKey> {
-    // Import credential ID as key material
-    const keyMaterial = await crypto.subtle.importKey(
+    const prfKey = await crypto.subtle.importKey(
       'raw',
-      new TextEncoder().encode(credentialId),
-      'PBKDF2',
+      prfOutput,
+      'HKDF',
       false,
-      ['deriveBits', 'deriveKey']
+      ['deriveKey']
     );
 
-    // Derive encryption key
     return crypto.subtle.deriveKey(
       {
-        name: 'PBKDF2',
-        salt: salt as BufferSource,
-        iterations: this.PBKDF2_ITERATIONS,
+        name: 'HKDF',
         hash: 'SHA-256',
+        salt: hkdfSalt as BufferSource,
+        info: new TextEncoder().encode(this.HKDF_INFO),
       },
-      keyMaterial,
-      { name: 'AES-GCM', length: this.KEY_LENGTH },
-      true,
+      prfKey,
+      { name: 'AES-GCM', length: 256 },
+      false,
       ['encrypt', 'decrypt']
     );
   }
 
   /**
-   * Encrypt password with credential-derived key
+   * Obtain the PRF output for a given credential by performing a user-verifying
+   * assertion. Triggers the biometric prompt. Returns the raw PRF bytes plus the
+   * credential id that actually responded.
    */
-  private async encryptPasswordWithCredential(
-    password: string,
-    credentialId: string
-  ): Promise<EncryptedData> {
-    // Generate salt for key derivation
-    const salt = crypto.getRandomValues(new Uint8Array(16));
+  private async evaluatePrf(
+    credentialIds: string[],
+    prfSaltByCredential: Map<string, ArrayBuffer>
+  ): Promise<{ credentialId: string; prfOutput: ArrayBuffer }> {
+    const challenge = this.generateChallenge();
 
-    // Derive key from credential ID
-    const key = await this.deriveKeyFromCredentialId(credentialId, salt);
+    // Build per-credential PRF eval inputs (keyed by credential id buffers).
+    const evalByCredential: Record<string, { first: BufferSource }> = {};
+    for (const id of credentialIds) {
+      const salt = prfSaltByCredential.get(id);
+      if (salt) {
+        // evalByCredential is keyed by base64url credential id (no padding).
+        const b64url = id.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        evalByCredential[b64url] = { first: new Uint8Array(salt) };
+      }
+    }
 
-    // Generate IV for encryption
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-
-    // Encrypt password
-    const encodedPassword = new TextEncoder().encode(password);
-    const ciphertext = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv: iv as BufferSource },
-      key,
-      encodedPassword
-    );
-
-    return {
-      iv: this.arrayBufferToBase64(iv),
-      salt: this.arrayBufferToBase64(salt),
-      ciphertext: this.arrayBufferToBase64(ciphertext),
-      version: 1,
+    const publicKeyOptions: PublicKeyCredentialRequestOptions & {
+      extensions?: { prf?: { evalByCredential?: Record<string, { first: BufferSource }> } };
+    } = {
+      challenge: challenge as BufferSource,
+      allowCredentials: credentialIds.map((id) => ({
+        id: this.base64ToArrayBuffer(id),
+        type: 'public-key',
+        transports: ['internal'],
+      })),
+      userVerification: 'required',
+      timeout: 60000,
+      rpId: this.RP_ID,
+      extensions: { prf: { evalByCredential } },
     };
-  }
 
-  /**
-   * Decrypt password with credential-derived key
-   */
-  private async decryptPasswordWithCredential(
-    encryptedPassword: EncryptedData,
-    credentialId: string
-  ): Promise<string> {
-    // Convert Base64 back to ArrayBuffers
-    const iv = this.base64ToArrayBuffer(encryptedPassword.iv);
-    const salt = this.base64ToArrayBuffer(encryptedPassword.salt);
-    const ciphertext = this.base64ToArrayBuffer(encryptedPassword.ciphertext);
+    const assertion = (await navigator.credentials.get({
+      publicKey: publicKeyOptions as PublicKeyCredentialRequestOptions,
+    })) as PublicKeyCredential;
 
-    // Derive same key from credential ID
-    const key = await this.deriveKeyFromCredentialId(
-      credentialId,
-      new Uint8Array(salt)
-    );
+    if (!assertion) {
+      throw new Error('Authentication failed');
+    }
 
-    // Decrypt password
-    const decryptedData = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: new Uint8Array(iv) as BufferSource },
-      key,
-      ciphertext
-    );
+    const credentialId = this.arrayBufferToBase64(assertion.rawId);
 
-    return new TextDecoder().decode(decryptedData);
+    const extResults = assertion.getClientExtensionResults() as {
+      prf?: { results?: { first?: ArrayBuffer } };
+    };
+    const prfOutput = extResults?.prf?.results?.first;
+
+    if (!prfOutput) {
+      throw new Error(
+        'This device/browser does not support the WebAuthn PRF extension, ' +
+          'which Lockt requires for secure biometric unlock. Please use your ' +
+          'master password.'
+      );
+    }
+
+    return { credentialId, prfOutput };
   }
 
   /**
@@ -207,8 +226,9 @@ class WebAuthnService {
     try {
       const challenge = this.generateChallenge();
 
-      // Create credential options
-      const publicKeyOptions: PublicKeyCredentialCreationOptions = {
+      const publicKeyOptions: PublicKeyCredentialCreationOptions & {
+        extensions?: { prf?: Record<string, never> };
+      } = {
         challenge: challenge as BufferSource,
         rp: {
           name: this.RP_NAME,
@@ -224,56 +244,81 @@ class WebAuthnService {
           { alg: -257, type: 'public-key' }, // RS256
         ],
         authenticatorSelection: {
-          authenticatorAttachment: 'platform', // Prefer platform authenticator (Face ID, Windows Hello)
-          userVerification: 'required', // Require biometric/PIN
-          residentKey: 'preferred', // Prefer discoverable credentials for passwordless
+          authenticatorAttachment: 'platform',
+          userVerification: 'required',
+          residentKey: 'preferred',
           requireResidentKey: false,
         },
         timeout: 60000,
-        attestation: 'none', // Don't need attestation for most use cases
+        attestation: 'none',
+        // Request the PRF extension on this credential.
+        extensions: { prf: {} },
       };
 
-      // Create credential
       const credential = (await navigator.credentials.create({
-        publicKey: publicKeyOptions,
+        publicKey: publicKeyOptions as PublicKeyCredentialCreationOptions,
       })) as PublicKeyCredential;
 
       if (!credential) {
         throw new Error('Failed to create credential');
       }
 
-      // Extract credential data
+      // Verify the authenticator actually supports PRF before we rely on it.
+      const createExt = credential.getClientExtensionResults() as {
+        prf?: { enabled?: boolean };
+      };
+      if (createExt?.prf?.enabled === false) {
+        throw new Error(
+          'This device does not support the secure biometric unlock method ' +
+            '(WebAuthn PRF) that Lockt requires. Biometric unlock was not enabled; ' +
+            'your master password still works as normal.'
+        );
+      }
+
       const response = credential.response as AuthenticatorAttestationResponse;
       const credentialId = this.arrayBufferToBase64(credential.rawId);
-      const publicKey = this.arrayBufferToBase64(response.getPublicKey()!);
+      const publicKeyBytes = response.getPublicKey();
+      const publicKey = publicKeyBytes ? this.arrayBufferToBase64(publicKeyBytes) : '';
 
-      // Encrypt password with credential-derived key
-      const encryptedPassword = await this.encryptPasswordWithCredential(
-        password,
-        credentialId
+      // Per-credential PRF salt + HKDF salt.
+      const prfSalt = crypto.getRandomValues(new Uint8Array(32));
+      const hkdfSalt = crypto.getRandomValues(new Uint8Array(16));
+
+      // Obtain the PRF output (requires a user-verifying assertion).
+      const { prfOutput } = await this.evaluatePrf(
+        [credentialId],
+        new Map([[credentialId, prfSalt.buffer]])
       );
 
-      // Create credential object
-      const biometricCredential: BiometricCredential = {
+      // Derive AES key and encrypt the password.
+      const key = await this.deriveKeyFromPrf(prfOutput, hkdfSalt);
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const ciphertext = await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv: iv as BufferSource },
+        key,
+        new TextEncoder().encode(password)
+      );
+
+      const encryptedPassword: EncryptedData = {
+        iv: this.arrayBufferToBase64(iv),
+        salt: this.arrayBufferToBase64(hkdfSalt),
+        ciphertext: this.arrayBufferToBase64(ciphertext),
+        version: 2,
+      };
+
+      return {
         id: credentialId,
-        publicKey: publicKey,
-        encryptedPassword: encryptedPassword,
+        publicKey,
+        encryptedPassword,
+        prfSalt: this.arrayBufferToBase64(prfSalt),
         deviceName: userName,
         authenticatorType: 'platform',
         createdAt: Date.now(),
         lastUsedAt: Date.now(),
       };
-
-      console.log('WebAuthn credential registered successfully:', {
-        id: credentialId.substring(0, 20) + '...',
-        deviceName: userName,
-      });
-
-      return biometricCredential;
     } catch (error) {
-      console.error('WebAuthn registration failed:', error);
+      console.error('WebAuthn registration failed:', error instanceof Error ? error.name : 'unknown');
       if (error instanceof Error) {
-        // Provide user-friendly error messages
         if (error.name === 'NotAllowedError') {
           throw new Error('Biometric registration was cancelled or not allowed');
         } else if (error.name === 'NotSupportedError') {
@@ -281,121 +326,110 @@ class WebAuthnService {
         } else if (error.name === 'InvalidStateError') {
           throw new Error('This device is already registered for biometric authentication');
         }
+        // Surface our own descriptive errors (e.g. PRF unsupported) unchanged.
+        if (error.message.includes('PRF') || error.message.includes('secure biometric')) {
+          throw error;
+        }
       }
       throw new Error('Failed to register biometric authentication');
     }
   }
 
   /**
-   * Authenticate with existing WebAuthn credential
-   * @param credentialIds - Array of credential IDs to allow for authentication
-   * @returns Credential ID and decrypted password
-   */
-  async authenticate(
-    credentialIds: string[]
-  ): Promise<{ credentialId: string; password: string }> {
-    if (!this.isSupported()) {
-      throw new Error('WebAuthn is not supported in this browser');
-    }
-
-    if (credentialIds.length === 0) {
-      throw new Error('No biometric credentials available');
-    }
-
-    try {
-      const challenge = this.generateChallenge();
-
-      // Create authentication options
-      const publicKeyOptions: PublicKeyCredentialRequestOptions = {
-        challenge: challenge as BufferSource,
-        allowCredentials: credentialIds.map((id) => ({
-          id: this.base64ToArrayBuffer(id),
-          type: 'public-key',
-          transports: ['internal'], // Platform authenticator
-        })),
-        userVerification: 'required', // Require biometric/PIN
-        timeout: 60000,
-        rpId: this.RP_ID,
-      };
-
-      // Get credential (triggers biometric prompt)
-      const assertion = (await navigator.credentials.get({
-        publicKey: publicKeyOptions,
-      })) as PublicKeyCredential;
-
-      if (!assertion) {
-        throw new Error('Authentication failed');
-      }
-
-      const credentialId = this.arrayBufferToBase64(assertion.rawId);
-
-      console.log('WebAuthn authentication successful:', {
-        id: credentialId.substring(0, 20) + '...',
-      });
-
-      return { credentialId, password: '' }; // Password will be decrypted separately
-    } catch (error) {
-      console.error('WebAuthn authentication failed:', error);
-      if (error instanceof Error) {
-        if (error.name === 'NotAllowedError') {
-          throw new Error('Biometric authentication was cancelled or failed');
-        } else if (error.name === 'NotSupportedError') {
-          throw new Error('Biometric authentication is not supported on this device');
-        }
-      }
-      throw new Error('Biometric authentication failed');
-    }
-  }
-
-  /**
-   * Authenticate and decrypt password in one step
-   * @param credentials - Array of stored biometric credentials
+   * Authenticate with stored credentials and decrypt the master password.
+   * Triggers the biometric prompt, then derives the key from the PRF output.
+   * @returns the decrypted password and the credential id that authenticated.
    */
   async authenticateAndDecrypt(
     credentials: BiometricCredential[]
-  ): Promise<string> {
+  ): Promise<{ password: string; credentialId: string }> {
     if (credentials.length === 0) {
       throw new Error('No biometric credentials available');
     }
 
-    // Authenticate with WebAuthn
-    const { credentialId } = await this.authenticate(
-      credentials.map((c) => c.id)
-    );
-
-    // Find matching credential
-    const credential = credentials.find((c) => c.id === credentialId);
-    if (!credential) {
-      throw new Error('Credential not found');
+    // Reject legacy (v1) credentials that lack a PRF salt — they used the old,
+    // insecure scheme and must be re-enrolled.
+    const usable = credentials.filter((c) => c.prfSalt);
+    if (usable.length === 0) {
+      throw new Error(
+        'Your saved biometric credential uses an outdated, insecure format and ' +
+          'has been disabled. Please unlock with your master password and re-enable ' +
+          'biometric unlock in Settings.'
+      );
     }
 
-    // Decrypt password using credential ID
-    const password = await this.decryptPasswordWithCredential(
-      credential.encryptedPassword,
-      credentialId
+    const prfSaltByCredential = new Map<string, ArrayBuffer>();
+    for (const c of usable) {
+      prfSaltByCredential.set(c.id, this.base64ToArrayBuffer(c.prfSalt!));
+    }
+
+    const { credentialId, prfOutput } = await this.evaluatePrf(
+      usable.map((c) => c.id),
+      prfSaltByCredential
     );
 
-    return password;
+    const credential = usable.find((c) => c.id === credentialId);
+    if (!credential) {
+      throw new Error('Authenticated credential not found in storage');
+    }
+
+    const hkdfSalt = new Uint8Array(
+      this.base64ToArrayBuffer(credential.encryptedPassword.salt)
+    );
+    const key = await this.deriveKeyFromPrf(prfOutput, hkdfSalt);
+
+    const iv = new Uint8Array(this.base64ToArrayBuffer(credential.encryptedPassword.iv));
+    const ciphertext = this.base64ToArrayBuffer(credential.encryptedPassword.ciphertext);
+
+    let decrypted: ArrayBuffer;
+    try {
+      decrypted = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: iv as BufferSource },
+        key,
+        ciphertext
+      );
+    } catch {
+      throw new Error('Biometric unlock failed to decrypt the stored password');
+    }
+
+    return {
+      password: new TextDecoder().decode(decrypted),
+      credentialId,
+    };
   }
 
   /**
-   * Re-encrypt password with existing credential ID
-   * Used when changing password - keeps same credential but updates encrypted password
+   * Re-encrypt the password for an existing credential (used on password change).
+   * Requires a fresh PRF assertion to obtain the credential's key material.
    */
   async reencryptPassword(
     password: string,
-    credentialId: string
+    credential: BiometricCredential
   ): Promise<EncryptedData> {
-    return await this.encryptPasswordWithCredential(password, credentialId);
-  }
+    if (!credential.prfSalt) {
+      throw new Error('Cannot re-encrypt a legacy credential; re-enroll instead');
+    }
 
-  /**
-   * Delete a WebAuthn credential (note: this only removes from our storage,
-   * the authenticator may still have the credential)
-   */
-  async deleteCredential(credentialId: string): Promise<void> {
-    console.log('Deleting credential:', credentialId.substring(0, 20) + '...');
-    // Actual deletion happens in database service
+    const prfSaltByCredential = new Map<string, ArrayBuffer>([
+      [credential.id, this.base64ToArrayBuffer(credential.prfSalt)],
+    ]);
+    const { prfOutput } = await this.evaluatePrf([credential.id], prfSaltByCredential);
+
+    const hkdfSalt = crypto.getRandomValues(new Uint8Array(16));
+    const key = await this.deriveKeyFromPrf(prfOutput, hkdfSalt);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ciphertext = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: iv as BufferSource },
+      key,
+      new TextEncoder().encode(password)
+    );
+
+    return {
+      iv: this.arrayBufferToBase64(iv),
+      salt: this.arrayBufferToBase64(hkdfSalt),
+      ciphertext: this.arrayBufferToBase64(ciphertext),
+      version: 2,
+    };
   }
 }
 

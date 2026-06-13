@@ -198,37 +198,41 @@ export const validateWalletAddress = (address: string, type: 'ETH' | 'BTC' | 'SO
   if (!address) return { isValid: true }; // Optional field
 
   switch (type) {
-    case 'ETH':
+    case 'ETH': {
       // Ethereum addresses start with 0x and are 42 characters
       const isValidETH = /^0x[a-fA-F0-9]{40}$/.test(address);
       return {
         isValid: isValidETH,
         error: isValidETH ? undefined : 'Invalid Ethereum address format',
       };
+    }
 
-    case 'BTC':
+    case 'BTC': {
       // Bitcoin addresses are typically 26-35 characters
       const isValidBTC = /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(address) || /^bc1[a-z0-9]{39,59}$/.test(address);
       return {
         isValid: isValidBTC,
         error: isValidBTC ? undefined : 'Invalid Bitcoin address format',
       };
+    }
 
-    case 'SOL':
+    case 'SOL': {
       // Solana addresses are base58 encoded and typically 32-44 characters
       const isValidSOL = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
       return {
         isValid: isValidSOL,
         error: isValidSOL ? undefined : 'Invalid Solana address format',
       };
+    }
 
-    default:
+    default: {
       // For other cryptocurrencies, just check it's alphanumeric
       const isValid = /^[a-zA-Z0-9]+$/.test(address);
       return {
         isValid,
         error: isValid ? undefined : 'Invalid wallet address format',
       };
+    }
   }
 };
 
