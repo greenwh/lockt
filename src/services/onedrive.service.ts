@@ -9,6 +9,8 @@ interface OneDriveFileMetadata {
   lastModifiedDateTime: string;
   size: number;
   id: string;
+  // Short-lived pre-authenticated URL; must be fetched WITHOUT an Authorization header
+  '@microsoft.graph.downloadUrl'?: string;
 }
 
 export interface SyncResult {
@@ -158,26 +160,27 @@ class OneDriveService {
   }
 
   /**
-   * Download encrypted data from OneDrive
+   * Download encrypted data from OneDrive.
+   * Path-based `approot:/file:/content` returns 400 invalidRequest on personal
+   * OneDrive accounts, so resolve the item first and use its downloadUrl.
    */
   async downloadData(): Promise<EncryptedData | null> {
     try {
-      const token = await this.getAccessToken();
-      const endpoint = `${this.GRAPH_ENDPOINT}/me/drive/special/approot:/${this.FILE_NAME}:/content`;
-
-      const response = await fetch(endpoint, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.status === 404) {
+      const metadata = await this.getFileMetadata();
+      if (!metadata) {
         return null; // File doesn't exist yet
       }
 
+      const downloadUrl = metadata['@microsoft.graph.downloadUrl'];
+      const response = downloadUrl
+        ? await fetch(downloadUrl)
+        : await fetch(`${this.GRAPH_ENDPOINT}/me/drive/items/${metadata.id}/content`, {
+            headers: { Authorization: `Bearer ${await this.getAccessToken()}` },
+          });
+
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Download failed: ${response.statusText} - ${errorText}`);
+        throw new Error(`Download failed: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
       const data = await response.json();
@@ -189,34 +192,31 @@ class OneDriveService {
   }
 
   /**
-   * Get file metadata (for sync comparison)
+   * Get file metadata (for sync comparison).
+   * Returns null ONLY when the file does not exist (404). Any other failure throws,
+   * so callers never mistake an auth/network error for "no remote file" and overwrite it.
    */
   async getFileMetadata(): Promise<OneDriveFileMetadata | null> {
-    try {
-      const token = await this.getAccessToken();
-      const endpoint = `${this.GRAPH_ENDPOINT}/me/drive/special/approot:/${this.FILE_NAME}`;
+    const token = await this.getAccessToken();
+    const endpoint = `${this.GRAPH_ENDPOINT}/me/drive/special/approot:/${this.FILE_NAME}`;
 
-      const response = await fetch(endpoint, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+    const response = await fetch(endpoint, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
-      if (response.status === 404) {
-        return null;
-      }
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Metadata fetch failed: ${response.statusText} - ${errorText}`);
-        return null;
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('OneDrive metadata fetch failed:', error);
+    if (response.status === 404) {
       return null;
     }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`OneDrive metadata fetch failed: ${response.status} ${response.statusText} - ${errorText}`);
+      throw new Error(`OneDrive metadata fetch failed: ${response.status}`);
+    }
+
+    return await response.json();
   }
 
   /**
