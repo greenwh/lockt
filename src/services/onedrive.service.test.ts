@@ -4,7 +4,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('@azure/msal-browser', () => {
   class PublicClientApplication {
+    static initializeCalls = 0;
+    initialized = false;
+    async initialize() {
+      PublicClientApplication.initializeCalls++;
+      await new Promise((r) => setTimeout(r, 5));
+      this.initialized = true;
+    }
+    async handleRedirectPromise() {
+      return null;
+    }
     getAllAccounts() {
+      if (!this.initialized) throw new Error('uninitialized_public_client_application');
       return [{ homeAccountId: 'acct' }];
     }
     async acquireTokenSilent() {
@@ -20,6 +31,9 @@ vi.stubGlobal('window', { location: { hostname: 'localhost' } });
 
 const { oneDriveService } = await import('./onedrive.service');
 const { saltRecoveryService } = await import('./saltRecovery.service');
+const { PublicClientApplication } = (await import('@azure/msal-browser')) as unknown as {
+  PublicClientApplication: { initializeCalls: number };
+};
 
 const REMOTE = { iv: 'iv', salt: 'salt', ciphertext: 'ct', version: 1 };
 const DOWNLOAD_URL = 'https://public.dm.files.1drv.com/presigned';
@@ -49,6 +63,26 @@ describe('oneDriveService', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  // Must run first: MSAL starts uninitialized and init() is memoized per instance.
+  describe('startup before MSAL is initialized', () => {
+    it('salt backup check waits for MSAL init instead of throwing', async () => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(metadata()))
+        .mockResolvedValueOnce(jsonResponse({ salt: 'abc123', version: 1 }));
+
+      // Mirrors App.tsx startup: nothing has called oneDriveService.init() yet
+      const status = await saltRecoveryService.hasBackups();
+
+      expect(status.oneDrive).toBe(true);
+      expect(PublicClientApplication.initializeCalls).toBe(1);
+    });
+
+    it('init() is memoized across concurrent callers', async () => {
+      await Promise.all([oneDriveService.init(), oneDriveService.init(), oneDriveService.init()]);
+      expect(PublicClientApplication.initializeCalls).toBe(1);
+    });
   });
 
   describe('downloadData', () => {

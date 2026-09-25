@@ -23,6 +23,7 @@ export interface SyncResult {
 
 class OneDriveService {
   private msalInstance: PublicClientApplication;
+  private initPromise: Promise<void> | null = null;
   private readonly FILE_NAME = 'lockt-data.encrypted';
   private readonly GRAPH_ENDPOINT = 'https://graph.microsoft.com/v1.0';
 
@@ -34,10 +35,18 @@ class OneDriveService {
    * Initialize MSAL authentication
    */
   async init(): Promise<void> {
-    await this.msalInstance.initialize();
+    // Memoized: safe to call from multiple startup paths. MSAL throws
+    // uninitialized_public_client_application if any API is used before this resolves.
+    this.initPromise ??= (async () => {
+      await this.msalInstance.initialize();
 
-    // Handle redirect response
-    await this.msalInstance.handleRedirectPromise();
+      // Handle redirect response
+      await this.msalInstance.handleRedirectPromise();
+    })().catch((error) => {
+      this.initPromise = null; // allow retry
+      throw error;
+    });
+    return this.initPromise;
   }
 
   /**

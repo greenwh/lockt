@@ -27,7 +27,7 @@ class SaltRecoveryService {
       console.log('saltRecoveryService: localStorage backup complete');
 
       // 2. Save to OneDrive (if connected)
-      if (oneDriveService.isSignedIn()) {
+      if (await this.isOneDriveSignedIn()) {
         console.log('saltRecoveryService: OneDrive is signed in, saving backup...');
         await this.saveToOneDrive(salt);
       } else {
@@ -109,7 +109,7 @@ class SaltRecoveryService {
    */
   async getFromOneDrive(): Promise<string | null> {
     try {
-      if (!oneDriveService.isSignedIn()) return null;
+      if (!(await this.isOneDriveSignedIn())) return null;
 
       const metadata = await oneDriveService.downloadAppFile<{ salt?: string }>(this.SALT_METADATA_FILE);
       if (!metadata) {
@@ -139,7 +139,7 @@ class SaltRecoveryService {
     }
 
     // Try OneDrive (if signed in)
-    if (oneDriveService.isSignedIn()) {
+    if (await this.isOneDriveSignedIn()) {
       const oneDriveSalt = await this.getFromOneDrive();
       if (oneDriveSalt) {
         // Restore to localStorage for future use
@@ -161,7 +161,7 @@ class SaltRecoveryService {
       localStorage.removeItem(this.LOCAL_STORAGE_KEY);
 
       // Clear OneDrive (if connected)
-      if (oneDriveService.isSignedIn()) {
+      if (await this.isOneDriveSignedIn()) {
         await this.deleteFromOneDrive();
       }
 
@@ -197,11 +197,25 @@ class SaltRecoveryService {
   }
 
   /**
+   * Check OneDrive sign-in, waiting for MSAL initialization first.
+   * This service runs during app startup, before SyncContext has initialized MSAL.
+   */
+  private async isOneDriveSignedIn(): Promise<boolean> {
+    try {
+      await oneDriveService.init();
+      return oneDriveService.isSignedIn();
+    } catch (error) {
+      console.error('OneDrive initialization failed:', error);
+      return false;
+    }
+  }
+
+  /**
    * Get access token from OneDrive service
    */
   private async getAccessToken(): Promise<string | null> {
     try {
-      if (!oneDriveService.isSignedIn()) {
+      if (!(await this.isOneDriveSignedIn())) {
         return null;
       }
       return await oneDriveService.getToken();
@@ -243,7 +257,7 @@ class SaltRecoveryService {
     const hasLocalStorage = !!(await this.getFromLocalStorage());
     let hasOneDrive = false;
 
-    if (oneDriveService.isSignedIn()) {
+    if (await this.isOneDriveSignedIn()) {
       hasOneDrive = !!(await this.getFromOneDrive());
     }
 
