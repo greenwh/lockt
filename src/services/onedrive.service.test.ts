@@ -173,8 +173,20 @@ describe('oneDriveService', () => {
       expect(fetchMock.mock.calls[1]).toEqual([DOWNLOAD_URL]);
     });
 
-    it('returns null when no salt metadata exists', async () => {
-      fetchMock.mockResolvedValueOnce(jsonResponse({ error: {} }, 404));
+    it('falls back to the salt embedded in the vault file when metadata is missing', async () => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ error: {} }, 404)) // salt metadata
+        .mockResolvedValueOnce(jsonResponse(metadata())) // vault metadata
+        .mockResolvedValueOnce(jsonResponse(REMOTE)); // vault content
+
+      expect(await saltRecoveryService.getFromOneDrive()).toBe(REMOTE.salt);
+      expect(fetchMock.mock.calls[1][0]).toContain('approot:/lockt-data.encrypted');
+    });
+
+    it('returns null when neither salt metadata nor vault file exists', async () => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ error: {} }, 404))
+        .mockResolvedValueOnce(jsonResponse({ error: {} }, 404));
 
       expect(await saltRecoveryService.getFromOneDrive()).toBeNull();
     });

@@ -105,20 +105,30 @@ class SaltRecoveryService {
   }
 
   /**
-   * Retrieve salt from OneDrive
+   * Retrieve salt from OneDrive.
+   * Tries the salt metadata file first, then falls back to the salt embedded in
+   * the encrypted vault file ({ iv, salt, ciphertext }). The metadata file is only
+   * written if OneDrive was signed in when the salt was saved, so it may be missing
+   * even though the vault is in OneDrive.
    */
   async getFromOneDrive(): Promise<string | null> {
     try {
       if (!(await this.isOneDriveSignedIn())) return null;
 
       const metadata = await oneDriveService.downloadAppFile<{ salt?: string }>(this.SALT_METADATA_FILE);
-      if (!metadata) {
-        console.log('No salt metadata found on OneDrive');
-        return null;
+      if (metadata?.salt) {
+        console.log('Salt recovered from OneDrive');
+        return metadata.salt;
       }
 
-      console.log('Salt recovered from OneDrive');
-      return metadata.salt || null;
+      console.log('No salt metadata found on OneDrive, checking encrypted vault file');
+      const vault = await oneDriveService.downloadData();
+      if (vault?.salt) {
+        console.log('Salt recovered from OneDrive vault file');
+        return vault.salt;
+      }
+
+      return null;
     } catch (error) {
       console.error('OneDrive salt recovery failed:', error);
       return null;
