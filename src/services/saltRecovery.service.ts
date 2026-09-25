@@ -109,28 +109,14 @@ class SaltRecoveryService {
    */
   async getFromOneDrive(): Promise<string | null> {
     try {
-      const token = await this.getAccessToken();
-      if (!token) return null;
+      if (!oneDriveService.isSignedIn()) return null;
 
-      const endpoint = `${this.GRAPH_ENDPOINT}/me/drive/special/approot:/${this.SALT_METADATA_FILE}:/content`;
-
-      const response = await fetch(endpoint, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.status === 404) {
+      const metadata = await oneDriveService.downloadAppFile<{ salt?: string }>(this.SALT_METADATA_FILE);
+      if (!metadata) {
         console.log('No salt metadata found on OneDrive');
         return null;
       }
 
-      if (!response.ok) {
-        console.error('Failed to download salt metadata from OneDrive:', response.statusText);
-        return null;
-      }
-
-      const metadata = await response.json();
       console.log('Salt recovered from OneDrive');
       return metadata.salt || null;
     } catch (error) {

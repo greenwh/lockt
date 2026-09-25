@@ -19,6 +19,7 @@ vi.mock('@azure/msal-browser', () => {
 vi.stubGlobal('window', { location: { hostname: 'localhost' } });
 
 const { oneDriveService } = await import('./onedrive.service');
+const { saltRecoveryService } = await import('./saltRecovery.service');
 
 const REMOTE = { iv: 'iv', salt: 'salt', ciphertext: 'ct', version: 1 };
 const DOWNLOAD_URL = 'https://public.dm.files.1drv.com/presigned';
@@ -123,6 +124,25 @@ describe('oneDriveService', () => {
       const result = await oneDriveService.sync(null, 0);
       expect(result.action).toBe('download');
       expect(result.remoteData).toEqual(REMOTE);
+    });
+  });
+
+  describe('saltRecoveryService.getFromOneDrive', () => {
+    it('downloads salt metadata via downloadUrl, not path-based :/content', async () => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(metadata()))
+        .mockResolvedValueOnce(jsonResponse({ salt: 'abc123', version: 1 }));
+
+      expect(await saltRecoveryService.getFromOneDrive()).toBe('abc123');
+      expect(fetchMock.mock.calls[0][0]).toContain('approot:/lockt-salt-metadata.json');
+      expect(fetchMock.mock.calls[0][0]).not.toContain(':/content');
+      expect(fetchMock.mock.calls[1]).toEqual([DOWNLOAD_URL]);
+    });
+
+    it('returns null when no salt metadata exists', async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse({ error: {} }, 404));
+
+      expect(await saltRecoveryService.getFromOneDrive()).toBeNull();
     });
   });
 });
