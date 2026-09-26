@@ -113,8 +113,8 @@ const RestoreBackupForm: React.FC<RestoreBackupFormProps> = ({ onRestored, onCan
             {fileName && <FileName>{fileName}</FileName>}
           </FileLabel>
           <Hint>
-            Choose a <code>lockt-backup-….json</code> file, or <code>lockt-data.encrypted</code> downloaded from
-            OneDrive (Apps → Lockt).
+            Choose a <code>lockt-backup-…</code> file (<code>.json</code> or <code>.txt</code>), or{' '}
+            <code>lockt-data.encrypted</code> downloaded from OneDrive (Apps → Lockt).
           </Hint>
         </>
       )}

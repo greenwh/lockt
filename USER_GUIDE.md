@@ -426,7 +426,7 @@ This also works on a new device or a browser whose data was cleared, as long as 
 
 **Strategy 3: Encrypted Backup File (Recommended)**
 - Settings → Backup & Restore → **Download backup** (on phones: **Share / Save to Files…**)
-- Saves `lockt-backup-YYYY-MM-DD.json`. It is encrypted: opening it needs your master password or recovery phrase, so it is safe to keep on a USB drive, in OneDrive, or in your email
+- Saves `lockt-backup-YYYY-MM-DD.json` (shared copies are named `.txt` because Chrome won't share `.json` files — same contents, both restore the same way). It is encrypted: opening it needs your master password or recovery phrase, so it is safe to keep on a USB drive, in OneDrive, or in your email
 - Make a new one after important changes; Settings shows when you last made one
 - Delete any unencrypted CSV exports once you have an encrypted backup
 
@@ -435,7 +435,7 @@ This also works on a new device or a browser whose data was cleared, as long as 
 Use this if your browser's data was cleared, you're setting up a new device, or you need an older version of your data.
 
 1. **On a cleared or new browser:** open Lockt and tap **Restore from backup file** on the Account Recovery screen. **While unlocked:** Settings → Backup & Restore → **Restore from backup file…**
-2. Choose your `lockt-backup-….json` file. You can also use `lockt-data.encrypted` downloaded from OneDrive (Apps → Lockt), including an older version from OneDrive's version history.
+2. Choose your `lockt-backup-…` file (`.json` or `.txt`). You can also use `lockt-data.encrypted` downloaded from OneDrive (Apps → Lockt), including an older version from OneDrive's version history.
 3. Enter the master password that was in effect when the backup was made (or tap **Use recovery phrase**). Nothing is changed yet; Lockt shows what the backup contains.
 4. Choose how it should sync:
    - **Keep the newest version** (recommended): if OneDrive has newer data, sync replaces the restore with it.

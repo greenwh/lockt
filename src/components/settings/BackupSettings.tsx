@@ -46,7 +46,11 @@ const BackupSettings: React.FC = () => {
   const prepareShareFile = useCallback(async () => {
     try {
       const { blob, filename } = await backupService.createBackupFile();
-      setPrepared({ file: new File([blob], filename, { type: 'application/json' }), filename });
+      // Chrome only shares allowlisted file types (.json is not one; it fails with
+      // "NotAllowedError: Permission denied"). Share as .txt / text/plain instead —
+      // same contents; restore and the emergency viewer detect backups by content.
+      const shareName = filename.replace(/\.json$/, '.txt');
+      setPrepared({ file: new File([blob], shareName, { type: 'text/plain' }), filename: shareName });
     } catch {
       setPrepared(null);
     }
