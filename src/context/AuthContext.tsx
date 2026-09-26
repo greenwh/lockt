@@ -3,6 +3,9 @@ import type { AppData, PasswordEntry, CreditCardEntry, CryptoEntry, FreetextEntr
 import { cryptoService } from '../services/crypto.service';
 import { databaseService } from '../services/database.service';
 import { oneDriveService } from '../services/onedrive.service';
+import { saltRecoveryService } from '../services/saltRecovery.service';
+import { backupService } from '../services/backup.service';
+import type { VerifiedBackup, RestoreMode } from '../services/backup.service';
 import { webAuthnService, type BiometricCredential } from '../services/webauthn.service';
 import { auditLogService, detectChanges } from '../services/auditlog.service';
 import type { AuditLogCategory } from '../services/auditlog.service';
@@ -37,6 +40,7 @@ interface AuthContextType {
   decryptBlob: (encryptedData: EncryptedData) => Promise<AppData>; // Decrypt an encrypted blob
   encryptData: (data: AppData) => Promise<EncryptedData>; // Encrypt AppData
   changePassword: (currentPassword: string | null, newPassword: string, recoveryPhrase: string) => Promise<void>;
+  restoreBackup: (verified: VerifiedBackup, mode: RestoreMode) => Promise<void>; // Replace vault from backup file, then unlock it
 
   // Biometric authentication
   enableBiometric: (deviceName: string) => Promise<void>; // Enroll biometric credential
@@ -141,23 +145,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const isRecoveryMode = !pwd && !!recoveryPhrase;
         let actualPassword = pwd;
 
-        // If using recovery phrase only, decrypt the password first
-        if (isRecoveryMode && recoveryPhrase) {
-          console.log('AuthContext: Recovery mode - decrypting password with recovery phrase');
-
-          const encryptedPassword = await databaseService.getConfig('encryptedPassword');
-          if (!encryptedPassword) {
-            throw new Error('No encrypted password found. This account may not support recovery phrase unlock.');
-          }
-
-          // Decrypt password using recovery phrase
-          actualPassword = await cryptoService.decryptPasswordWithRecoveryPhrase(
-            encryptedPassword,
-            recoveryPhrase
-          );
-          console.log('AuthContext: Password recovered successfully');
-        }
-
         // Get encrypted data (includes salt)
         let encryptedData = await databaseService.getEncryptedData();
 
@@ -185,11 +172,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
-        // Decrypt with actual password (either provided directly or recovered from recovery phrase)
-        const decryptedJson = await cryptoService.decrypt(
-          encryptedData,
-          actualPassword
-        );
+        let decryptedJson: string;
+
+        if (isRecoveryMode && recoveryPhrase) {
+          // Recover the password from an escrow. This device's escrow may be
+          // missing (new device) or stale (password changed elsewhere), so fall
+          // back to the escrow backed up on OneDrive.
+          console.log('AuthContext: Recovery mode - resolving password with recovery phrase');
+          const localEscrow = (await databaseService.getConfig('encryptedPassword')) as EncryptedData | undefined;
+
+          let resolved;
+          try {
+            resolved = await cryptoService.resolvePasswordWithRecoveryPhrase(encryptedData, recoveryPhrase, [localEscrow]);
+          } catch (localErr) {
+            const remoteEscrow = await saltRecoveryService.getOneDriveEscrow();
+            if (!remoteEscrow) throw localErr;
+            resolved = await cryptoService.resolvePasswordWithRecoveryPhrase(encryptedData, recoveryPhrase, [
+              localEscrow,
+              remoteEscrow,
+            ]);
+          }
+
+          actualPassword = resolved.password;
+          decryptedJson = resolved.plaintext;
+
+          if (resolved.escrow !== localEscrow) {
+            // Repair this device's escrow (also refreshes the OneDrive copy)
+            await databaseService.setConfig('encryptedPassword', resolved.escrow);
+          } else {
+            // Proven-good escrow: back it up to OneDrive if it's missing there
+            void saltRecoveryService.backfillOneDriveBackup(encryptedData.salt, resolved.escrow);
+          }
+          console.log('AuthContext: Password recovered successfully');
+        } else {
+          // Decrypt with the master password
+          decryptedJson = await cryptoService.decrypt(encryptedData, actualPassword);
+        }
+
         const data: AppData = JSON.parse(decryptedJson);
 
         setAppData(data);
@@ -575,6 +594,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   /**
+   * Restore a verified backup file, replacing this device's vault, then unlock
+   * with the backup's password. Works both while unlocked (Settings) and locked
+   * (recovery screen on a wiped device).
+   */
+  const restoreBackup = useCallback(
+    async (verified: VerifiedBackup, mode: RestoreMode) => {
+      setError(null);
+      await backupService.restoreBackup(verified, mode, isLocked ? null : password);
+      await lock();
+      await unlock(verified.password);
+      await checkBiometricAvailability();
+    },
+    [isLocked, password, lock, unlock, checkBiometricAvailability]
+  );
+
+  /**
    * Helper to update AppData and save to database
    */
   const updateAppData = useCallback(
@@ -703,6 +738,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         decryptBlob,
         encryptData,
         changePassword,
+        restoreBackup,
         enableBiometric,
         disableBiometric,
         getBiometricCredentials,

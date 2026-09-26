@@ -537,6 +537,19 @@ await disableBiometric(credentialId);
 3. Test conflict resolution (both modified)
 4. Test offline behavior (should gracefully fail, allow local-only work)
 
+### Backup & Restore
+
+**Files:** `src/services/backup.service.ts` (create/parse/verify/restore), `src/components/backup/RestoreBackupForm.tsx` (shared by Settings and RecoveryFlow), `src/components/settings/BackupSettings.tsx`, `src/services/storagePersistence.service.ts`.
+
+- **Backup file** (`lockt-backup-YYYY-MM-DD.json`, format `lockt-backup` v1): `{ vault, encryptedPassword (recovery-phrase escrow), lastModified, exportedAt }`. Everything in it is already encrypted.
+- **Import accepts:** lockt-backup v1, the legacy `{ iv, salt, ciphertext, config }` export, and raw `lockt-data.encrypted` from OneDrive.
+- **Verify before write:** `verifyBackup()` decrypts with the password (or recovery phrase via escrow) and checks it is AppData. Nothing is written until the user confirms.
+- **Atomic restore:** `databaseService.restoreVault()` writes vault + salt + lastModified + escrow in ONE transaction and deletes `lastSyncTime` (prevents false conflicts). Biometric credentials are cleared unless the restored password equals the current one.
+- **Sync semantics:** `'keep-newer'` sets `lastModified` to the backup's own time (newer OneDrive data wins on next sync); `'make-current'` sets it to now (next sync uploads).
+- **Recovery-phrase escrow on OneDrive:** `lockt-salt-metadata.json` v2 = `{ salt, encryptedPassword }`. The escrow is only valid with its salt: a salt-only write keeps the escrow only if salts match; `backfillOneDriveBackup()` (after each successful sync) never overwrites an existing escrow or a different salt.
+- **Recovery-phrase unlock** (`cryptoService.resolvePasswordWithRecoveryPhrase`) tries the local escrow, then OneDrive's, and uses the first whose password actually decrypts the vault; it repairs the local copy.
+- **Persistent storage:** `navigator.storage.persist()` requested at startup once an account exists; status shown in Settings.
+
 ### Debugging Encryption Issues
 
 **Symptoms of wrong key/password:**
@@ -597,8 +610,9 @@ await disableBiometric(credentialId);
 public client bundle and must contain only generic example data. (A prior
 version contained real medical/military records — do not reintroduce.)
 
-**Testing:** `npm run test` (Vitest). Crypto round-trip, recovery-phrase escrow,
-phrase validation, and conflict-merge logic are covered. Run before/after
+**Testing:** `npm run test` (Vitest, `fake-indexeddb` for IndexedDB). Crypto round-trip, recovery-phrase escrow,
+phrase validation, conflict-merge logic, OneDrive download/metadata handling, and backup
+create/parse/verify/restore are covered. Run before/after
 changes to crypto, sync, or merge code.
 
 **Key Security Properties:**
@@ -672,8 +686,14 @@ changes to crypto, sync, or merge code.
 3. ~~**UI Refresh After Sync**~~ - Data updates immediately via `reloadFromDatabase()` pattern
 4. ~~**Recovery Phrase Login**~~ - Toggle on login screen allows recovery phrase authentication
 
+### ✅ Fixed (September 2026)
+1. ~~**OneDrive download 400**~~ - Path-based `GET approot:/<file>:/content` returns 400 invalidRequest on personal OneDrive. **All downloads must use `oneDriveService.downloadAppFile()`** (metadata → `@microsoft.graph.downloadUrl`). PUT uploads to `:/content` are fine.
+2. ~~**MSAL init race**~~ - `oneDriveService.init()` is memoized; startup code must `await` it before `isSignedIn()`.
+3. ~~**Salt recovery**~~ - Falls back to the salt embedded in `lockt-data.encrypted` when `lockt-salt-metadata.json` is missing.
+4. ~~**No backups**~~ - Encrypted backup export/restore (see "Backup & Restore" under Common Development Tasks).
+
 ### ⚠️ Remaining Limitations
-1. **No Salt Recovery** - If IndexedDB deleted, encrypted data on OneDrive can't be recovered
+1. **Multi-device password change** - Other devices keep their old in-memory password/config salt after downloading a vault re-encrypted with a new password; re-unlock (or restore) is needed.
 2. **No Sync Settings UI** - Users can't configure auto-sync frequency or Wi-Fi-only mode
 3. **Limited Status Feedback** - Last sync time not prominently displayed in UI
 4. **Retry Logic** - Failed syncs have exponential backoff but no manual retry button

@@ -4,14 +4,16 @@ import React, { useState, useEffect } from 'react';
 import { databaseService } from '../../services/database.service';
 import { oneDriveService } from '../../services/onedrive.service';
 import styled from 'styled-components';
+import RestoreBackupForm from '../backup/RestoreBackupForm';
 
 interface RecoveryFlowProps {
   onRecoveryComplete: () => void;
   onRecoveryFailed: () => void;
   onStartFreshSetup: () => void;
+  onRestoreComplete: () => void; // Vault restored from a backup file and unlocked
 }
 
-const RecoveryFlow: React.FC<RecoveryFlowProps> = ({ onRecoveryComplete, onRecoveryFailed, onStartFreshSetup }) => {
+const RecoveryFlow: React.FC<RecoveryFlowProps> = ({ onRecoveryComplete, onRecoveryFailed, onStartFreshSetup, onRestoreComplete }) => {
   const [status, setStatus] = useState<'checking' | 'found' | 'not-found' | 'recovering' | 'success' | 'failed'>('checking');
   const [backupStatus, setBackupStatus] = useState<{
     indexedDB: boolean;
@@ -20,6 +22,7 @@ const RecoveryFlow: React.FC<RecoveryFlowProps> = ({ onRecoveryComplete, onRecov
   } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [needsOneDriveSignIn, setNeedsOneDriveSignIn] = useState(false);
+  const [showRestore, setShowRestore] = useState(false);
 
   useEffect(() => {
     checkSaltStatus();
@@ -119,7 +122,24 @@ const RecoveryFlow: React.FC<RecoveryFlowProps> = ({ onRecoveryComplete, onRecov
     <Container>
       <Title>Account Recovery</Title>
 
-      {status === 'checking' && (
+      {showRestore && (
+        <StatusSection>
+          <StatusIcon>🗂️</StatusIcon>
+          <StatusText>Restore from Backup File</StatusText>
+          <RestoreBackupForm onRestored={onRestoreComplete} onCancel={() => setShowRestore(false)} />
+        </StatusSection>
+      )}
+
+      {!showRestore && (status === 'found' || status === 'not-found' || status === 'failed') && (
+        <RestoreOffer>
+          Have a backup file?{' '}
+          <RestoreLink type="button" onClick={() => setShowRestore(true)}>
+            Restore from backup file
+          </RestoreLink>
+        </RestoreOffer>
+      )}
+
+      {!showRestore && status === 'checking' && (
         <StatusSection>
           <StatusIcon>🔍</StatusIcon>
           <StatusText>Checking for recovery options...</StatusText>
@@ -127,7 +147,7 @@ const RecoveryFlow: React.FC<RecoveryFlowProps> = ({ onRecoveryComplete, onRecov
         </StatusSection>
       )}
 
-      {status === 'found' && backupStatus && !backupStatus.indexedDB && (
+      {!showRestore && status === 'found' && backupStatus && !backupStatus.indexedDB && (
         <StatusSection>
           <StatusIcon>✅</StatusIcon>
           <StatusText>Recovery backup found!</StatusText>
@@ -158,7 +178,7 @@ const RecoveryFlow: React.FC<RecoveryFlowProps> = ({ onRecoveryComplete, onRecov
         </StatusSection>
       )}
 
-      {status === 'not-found' && (
+      {!showRestore && status === 'not-found' && (
         <StatusSection>
           <StatusIcon>❌</StatusIcon>
           <StatusText>No Recovery Backups Found Locally</StatusText>
@@ -198,7 +218,7 @@ const RecoveryFlow: React.FC<RecoveryFlowProps> = ({ onRecoveryComplete, onRecov
         </StatusSection>
       )}
 
-      {status === 'recovering' && (
+      {!showRestore && status === 'recovering' && (
         <StatusSection>
           <StatusIcon>🔄</StatusIcon>
           <StatusText>Recovering your account...</StatusText>
@@ -206,7 +226,7 @@ const RecoveryFlow: React.FC<RecoveryFlowProps> = ({ onRecoveryComplete, onRecov
         </StatusSection>
       )}
 
-      {status === 'success' && (
+      {!showRestore && status === 'success' && (
         <StatusSection>
           <StatusIcon>🎉</StatusIcon>
           <StatusText>Account Recovered Successfully!</StatusText>
@@ -214,7 +234,7 @@ const RecoveryFlow: React.FC<RecoveryFlowProps> = ({ onRecoveryComplete, onRecov
         </StatusSection>
       )}
 
-      {status === 'failed' && (
+      {!showRestore && status === 'failed' && (
         <StatusSection>
           <StatusIcon>⚠️</StatusIcon>
           <StatusText>Recovery Failed</StatusText>
@@ -449,4 +469,22 @@ const BackupStatusValue = styled.span<{ $available: boolean }>`
   font-size: 13px;
   font-weight: 600;
   color: ${(props) => (props.$available ? props.theme.colors.success : props.theme.colors.error)};
+`;
+
+const RestoreOffer = styled.p`
+  font-size: 15px;
+  text-align: center;
+  color: ${(props) => props.theme.colors.textLight};
+  margin: 0 0 24px 0;
+`;
+
+const RestoreLink = styled.button`
+  background: none;
+  border: none;
+  padding: 0;
+  color: ${(props) => props.theme.colors.textLight};
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
 `;

@@ -87,6 +87,67 @@ class DatabaseService {
       await saltRecoveryService.saveSaltBackups(value);
       console.log('database.service: Salt backups completed');
     }
+
+    // Recovery-phrase escrow changed (setup / password change): back it up to
+    // OneDrive alongside the salt it belongs to, so the recovery phrase works on
+    // a new device. Salt is always written before the escrow by callers.
+    if (key === 'encryptedPassword' && value) {
+      const salt = await this.getConfig('salt');
+      if (typeof salt === 'string') {
+        await saltRecoveryService.saveSaltBackups(salt, value);
+      }
+    }
+  }
+
+  /**
+   * Delete a configuration value
+   */
+  async deleteConfig(key: string): Promise<void> {
+    await this.init();
+    await this.db!.delete('app-config', key);
+  }
+
+  /**
+   * Ensure this device has a device ID (set at account creation; missing on
+   * devices set up via recovery or restore, which breaks biometric enrollment).
+   */
+  async ensureDeviceId(): Promise<string> {
+    const existing = await this.getConfig('deviceId');
+    if (typeof existing === 'string' && existing) return existing;
+    const deviceId = crypto.getRandomValues(new Uint8Array(16)).toString();
+    await this.setConfig('deviceId', deviceId);
+    return deviceId;
+  }
+
+  /**
+   * Atomically replace the vault with a restored one (single transaction, so an
+   * interrupted restore never leaves a vault paired with the wrong salt).
+   * lastSyncTime is cleared so the next sync compares timestamps instead of
+   * reporting a false conflict. Does NOT trigger cloud salt backups — the
+   * caller does that after the transaction commits.
+   */
+  async restoreVault(params: {
+    vault: EncryptedData;
+    lastModified: number;
+    encryptedPassword: EncryptedData | null;
+    clearBiometrics: boolean;
+  }): Promise<void> {
+    await this.init();
+    const tx = this.db!.transaction(['encrypted-data', 'app-config', 'biometric-credentials'], 'readwrite');
+    const config = tx.objectStore('app-config');
+    await Promise.all([
+      tx.objectStore('encrypted-data').put(params.vault, 'main'),
+      config.put(params.vault.salt, 'salt'),
+      config.put(params.lastModified, 'lastModified'),
+      config.delete('lastSyncTime'),
+      // Keep an existing escrow if the backup has none: unlock tries every
+      // escrow candidate, so a stale one can't lock the user out.
+      params.encryptedPassword ? config.put(params.encryptedPassword, 'encryptedPassword') : Promise.resolve(),
+      params.clearBiometrics ? tx.objectStore('biometric-credentials').clear() : Promise.resolve(),
+      tx.done,
+    ]);
+
+    await this.ensureDeviceId();
   }
 
   /**
@@ -113,67 +174,6 @@ class DatabaseService {
   }
 
   /**
-   * Export encrypted data as downloadable file
-   */
-  async exportBackup(): Promise<Blob> {
-    const data = await this.getEncryptedData();
-    if (!data) {
-      throw new Error('No data to export');
-    }
-    
-    const config = {
-      salt: await this.getConfig('salt'),
-      deviceId: await this.getConfig('deviceId'),
-      exportDate: Date.now()
-    };
-
-    const exportData = {
-      ...data,
-      config
-    };
-
-    return new Blob(
-      [JSON.stringify(exportData, null, 2)], 
-      { type: 'application/json' }
-    );
-  }
-
-  /**
-   * Import encrypted data from backup file
-   */
-  async importBackup(fileContent: string): Promise<void> {
-    try {
-      const importData = JSON.parse(fileContent);
-
-      // Validate structure
-      if (!importData.iv || !importData.salt || !importData.ciphertext) {
-        throw new Error('Invalid backup file format');
-      }
-
-      // Save encrypted data
-      await this.saveEncryptedData({
-        iv: importData.iv,
-        salt: importData.salt,
-        ciphertext: importData.ciphertext,
-        version: importData.version || 1
-      });
-
-      // Restore config if present
-      if (importData.config) {
-        if (importData.config.salt) {
-          await this.setConfig('salt', importData.config.salt);
-        }
-        if (importData.config.deviceId) {
-          await this.setConfig('deviceId', importData.config.deviceId);
-        }
-      }
-    } catch (error) {
-      console.error('Import failed:', error);
-      throw new Error('Failed to import backup - invalid file format');
-    }
-  }
-
-  /**
    * Attempt to recover salt from backup locations
    * Used when IndexedDB salt is missing
    */
@@ -193,6 +193,7 @@ class DatabaseService {
     if (recoveredSalt) {
       // Restore to IndexedDB
       await this.setConfig('salt', recoveredSalt);
+      await this.ensureDeviceId();
       console.log('Salt successfully recovered and restored to IndexedDB');
       return recoveredSalt;
     }

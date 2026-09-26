@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './context/AuthContext';
 import { databaseService } from './services/database.service';
+import { storagePersistenceService } from './services/storagePersistence.service';
 import AppShell from './components/layout/AppShell';
 import TabNavigation from './components/layout/TabNavigation';
 import type { Tab } from './components/layout/TabNavigation';
@@ -72,6 +73,13 @@ const App: React.FC = () => {
     checkAccount();
   }, []);
 
+  // Ask the browser not to evict Lockt's local data under storage pressure
+  useEffect(() => {
+    if (hasAccount) {
+      storagePersistenceService.request();
+    }
+  }, [hasAccount]);
+
   const handleRecoveryComplete = () => {
     setNeedsRecovery(false);
     // Refresh account status
@@ -83,6 +91,12 @@ const App: React.FC = () => {
     await databaseService.clearAll();
     setNeedsRecovery(false);
     setHasAccount(false);
+  };
+
+  const handleRestoreComplete = () => {
+    // Restore already wrote the vault and unlocked it — go straight to the app
+    setNeedsRecovery(false);
+    setHasAccount(true);
   };
 
   const handleStartFreshSetup = () => {
@@ -107,6 +121,7 @@ const App: React.FC = () => {
         onRecoveryComplete={handleRecoveryComplete}
         onRecoveryFailed={handleRecoveryFailed}
         onStartFreshSetup={handleStartFreshSetup}
+        onRestoreComplete={handleRestoreComplete}
       />
     );
   }

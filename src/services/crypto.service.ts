@@ -225,6 +225,55 @@ class CryptoService {
     // Decrypt the password using recovery phrase
     return await this.decrypt(encryptedPassword, recoveryPhrase);
   }
+
+  /**
+   * Recover the master password with the recovery phrase, trying each escrow
+   * candidate (e.g. this device's and OneDrive's) until one yields a password that
+   * actually decrypts the vault. A device's escrow can be stale if the password
+   * was changed on another device.
+   */
+  async resolvePasswordWithRecoveryPhrase(
+    vault: EncryptedData,
+    recoveryPhrase: string,
+    escrows: Array<EncryptedData | null | undefined>
+  ): Promise<{ password: string; escrow: EncryptedData; plaintext: string }> {
+    const seen = new Set<string>();
+    let phraseMatchedAny = false;
+
+    for (const escrow of escrows) {
+      if (!escrow) continue;
+      const key = escrow.ciphertext;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      let password: string;
+      try {
+        password = await this.decryptPasswordWithRecoveryPhrase(escrow, recoveryPhrase);
+      } catch {
+        continue; // Phrase doesn't open this escrow
+      }
+      phraseMatchedAny = true;
+
+      try {
+        const plaintext = await this.decrypt(vault, password);
+        return { password, escrow, plaintext };
+      } catch {
+        // Stale escrow (password changed since) — try the next one
+      }
+    }
+
+    if (seen.size === 0) {
+      throw new Error(
+        'No recovery data found for this account. Sign in to OneDrive or restore from a backup file, then try again — or unlock with your master password.'
+      );
+    }
+    if (phraseMatchedAny) {
+      throw new Error(
+        'Your recovery phrase is correct, but the recovery data is out of date (the password was changed on another device). Unlock with your current master password.'
+      );
+    }
+    throw new Error('Recovery phrase is incorrect');
+  }
 }
 
 export const cryptoService = new CryptoService();

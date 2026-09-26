@@ -2,6 +2,7 @@
 
 import { oneDriveService } from './onedrive.service';
 import { databaseService } from './database.service';
+import { saltRecoveryService } from './saltRecovery.service';
 import type { SyncSettings } from '../types/sync.types';
 
 class SyncService {
@@ -147,6 +148,8 @@ class SyncService {
           break;
       }
 
+      await this.backfillRecoveryBackup();
+
       return { success: true, action: syncResult.action };
     } catch (error) {
       console.error('Sync failed:', error);
@@ -157,6 +160,23 @@ class SyncService {
       };
     } finally {
       this.syncInProgress = false;
+    }
+  }
+
+  /**
+   * After a successful sync, make sure OneDrive has this account's recovery
+   * metadata (salt + recovery-phrase escrow). Only runs when this device's salt
+   * matches its vault, so a device with stale config can't publish it. Never fails the sync.
+   */
+  private async backfillRecoveryBackup(): Promise<void> {
+    try {
+      const vault = await databaseService.getEncryptedData();
+      const salt = await databaseService.getConfig('salt');
+      if (!vault || typeof salt !== 'string' || vault.salt !== salt) return;
+      const escrow = (await databaseService.getConfig('encryptedPassword')) ?? null;
+      await saltRecoveryService.backfillOneDriveBackup(salt, escrow);
+    } catch (error) {
+      console.error('Recovery backup backfill failed:', error);
     }
   }
 

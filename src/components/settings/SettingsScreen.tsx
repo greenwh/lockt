@@ -7,6 +7,7 @@ import BiometricSettings from './BiometricSettings';
 import SyncSettings from '../sync/SyncSettings';
 import SyncLog from '../sync/SyncLog';
 import AuditLog from './AuditLog';
+import BackupSettings from './BackupSettings';
 
 const SettingsScreen: React.FC = () => {
   const [showSyncLog, setShowSyncLog] = useState(false);
@@ -30,6 +31,11 @@ const SettingsScreen: React.FC = () => {
           {showAuditLog ? 'Hide Data Changes' : 'View Data Changes'}
         </SyncLogToggle>
         {showAuditLog && <AuditLog />}
+      </Section>
+
+      <Section>
+        <SectionTitle>Backup &amp; Restore</SectionTitle>
+        <BackupSettings />
       </Section>
 
       <Section>

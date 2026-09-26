@@ -1,6 +1,20 @@
 // src/services/saltRecovery.service.ts
 
 import { oneDriveService } from './onedrive.service';
+import type { EncryptedData } from '../types/data.types';
+
+/**
+ * OneDrive recovery metadata (lockt-salt-metadata.json).
+ * v2 adds the recovery-phrase escrow of the master password. The escrow is only
+ * valid together with the salt it is stored with (both change on password change).
+ */
+export interface RecoveryMetadata {
+  salt: string;
+  encryptedPassword?: EncryptedData;
+  createdAt: number;
+  version: number;
+  deviceId?: string;
+}
 
 /**
  * Salt Recovery Service
@@ -8,17 +22,21 @@ import { oneDriveService } from './onedrive.service';
  * Ensures salt is backed up in multiple locations for account recovery:
  * 1. IndexedDB (primary storage)
  * 2. localStorage (survives IndexedDB clear)
- * 3. OneDrive metadata file (recovery from new device)
+ * 3. OneDrive metadata file (recovery from new device), which also carries the
+ *    recovery-phrase escrow so the recovery phrase works on a new device
  */
 class SaltRecoveryService {
   private readonly SALT_METADATA_FILE = 'lockt-salt-metadata.json';
   private readonly LOCAL_STORAGE_KEY = 'lockt-salt-backup';
   private readonly GRAPH_ENDPOINT = 'https://graph.microsoft.com/v1.0';
+  private backfillCheckedKey: string | null = null;
 
   /**
-   * Save salt to all backup locations
+   * Save salt to all backup locations.
+   * @param encryptedPassword recovery-phrase escrow belonging to this salt. When
+   *   omitted, an escrow already on OneDrive is kept only if it has the same salt.
    */
-  async saveSaltBackups(salt: string): Promise<void> {
+  async saveSaltBackups(salt: string, encryptedPassword?: EncryptedData): Promise<void> {
     try {
       console.log('saltRecoveryService: Starting salt backups...');
 
@@ -29,7 +47,7 @@ class SaltRecoveryService {
       // 2. Save to OneDrive (if connected)
       if (await this.isOneDriveSignedIn()) {
         console.log('saltRecoveryService: OneDrive is signed in, saving backup...');
-        await this.saveToOneDrive(salt);
+        await this.saveToOneDrive(salt, encryptedPassword);
       } else {
         console.log('saltRecoveryService: OneDrive not signed in, skipping cloud backup');
       }
@@ -37,6 +55,38 @@ class SaltRecoveryService {
       console.error('Failed to save salt backups:', error);
       // Don't throw - main salt storage already succeeded
     }
+  }
+
+  /**
+   * Fill in missing OneDrive recovery metadata from this device (e.g. accounts
+   * created before OneDrive was connected, or before escrow was backed up).
+   * Never overwrites an escrow already on OneDrive, and does nothing when OneDrive
+   * holds a different salt (another device may have changed the password).
+   */
+  async backfillOneDriveBackup(salt: string, encryptedPassword: EncryptedData | null): Promise<void> {
+    const checkKey = `${salt}|${encryptedPassword?.ciphertext ?? ''}`;
+    if (this.backfillCheckedKey === checkKey) return; // Already checked this session
+    try {
+      if (!(await this.isOneDriveSignedIn())) return;
+
+      const existing = await this.getOneDriveMetadata();
+      const otherSalt = !!existing && existing.salt !== salt;
+      const nothingToAdd = !!existing && (!!existing.encryptedPassword || !encryptedPassword);
+      const upToDate = otherSalt || nothingToAdd || (await this.saveToOneDrive(salt, encryptedPassword ?? undefined));
+      if (upToDate) this.backfillCheckedKey = checkKey;
+    } catch (error) {
+      console.error('OneDrive recovery backfill failed:', error);
+    }
+  }
+
+  /**
+   * Read the OneDrive recovery metadata file. Returns null if it doesn't exist.
+   * Throws on network/auth errors.
+   */
+  async getOneDriveMetadata(): Promise<RecoveryMetadata | null> {
+    const metadata = await oneDriveService.downloadAppFile<RecoveryMetadata>(this.SALT_METADATA_FILE);
+    if (!metadata || typeof metadata.salt !== 'string' || !metadata.salt) return null;
+    return metadata;
   }
 
   /**
@@ -68,17 +118,29 @@ class SaltRecoveryService {
   }
 
   /**
-   * Save salt metadata to OneDrive
+   * Save salt metadata (and escrow) to OneDrive, merging with what is there.
+   * Returns true if OneDrive is up to date afterwards.
    */
-  private async saveToOneDrive(salt: string): Promise<void> {
+  private async saveToOneDrive(salt: string, encryptedPassword?: EncryptedData): Promise<boolean> {
     try {
       const token = await this.getAccessToken();
-      if (!token) return;
+      if (!token) return false;
 
-      const metadata = {
+      const existing = await this.getOneDriveMetadata();
+      const escrow = encryptedPassword ?? (existing?.salt === salt ? existing.encryptedPassword : undefined);
+
+      if (
+        existing?.salt === salt &&
+        JSON.stringify(existing.encryptedPassword ?? null) === JSON.stringify(escrow ?? null)
+      ) {
+        return true; // Already up to date
+      }
+
+      const metadata: RecoveryMetadata = {
         salt,
+        ...(escrow ? { encryptedPassword: escrow } : {}),
         createdAt: Date.now(),
-        version: 1,
+        version: 2,
         deviceId: this.getDeviceId(),
       };
 
@@ -95,12 +157,28 @@ class SaltRecoveryService {
 
       if (response.ok) {
         console.log('Salt metadata backed up to OneDrive');
-      } else {
-        console.error('Failed to upload salt metadata to OneDrive:', response.statusText);
+        return true;
       }
+      console.error('Failed to upload salt metadata to OneDrive:', response.statusText);
+      return false;
     } catch (error) {
       console.error('OneDrive salt backup failed:', error);
       // Don't throw - this is a backup operation
+      return false;
+    }
+  }
+
+  /**
+   * Get the recovery-phrase escrow stored on OneDrive, if any.
+   */
+  async getOneDriveEscrow(): Promise<EncryptedData | null> {
+    try {
+      if (!(await this.isOneDriveSignedIn())) return null;
+      const metadata = await this.getOneDriveMetadata();
+      return metadata?.encryptedPassword ?? null;
+    } catch (error) {
+      console.error('Failed to read recovery data from OneDrive:', error);
+      return null;
     }
   }
 
@@ -115,8 +193,8 @@ class SaltRecoveryService {
     try {
       if (!(await this.isOneDriveSignedIn())) return null;
 
-      const metadata = await oneDriveService.downloadAppFile<{ salt?: string }>(this.SALT_METADATA_FILE);
-      if (metadata?.salt) {
+      const metadata = await this.getOneDriveMetadata();
+      if (metadata) {
         console.log('Salt recovered from OneDrive');
         return metadata.salt;
       }

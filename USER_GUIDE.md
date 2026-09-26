@@ -400,10 +400,11 @@ A conflict occurs when you modify the same data on two devices before they sync.
 
 **Option 1: Use Recovery Phrase** (Recommended)
 1. Open Lockt
-2. Tap "🔐 Use recovery phrase"
-3. Enter your password (you still need to remember some part of it)
-4. Enter your 12-word recovery phrase
-5. Unlock your account
+2. Tap "🔐 Forgot password? Use recovery phrase"
+3. Enter your 12-word recovery phrase (no password needed)
+4. Tap "Recover & Unlock"
+
+This also works on a new device or a browser whose data was cleared, as long as you are signed in to OneDrive (Lockt keeps the recovery data there) or you restore from a backup file.
 
 **Option 2: If You Forgot BOTH Password + Recovery Phrase**
 - ⚠️ **Your data is permanently lost**
@@ -423,9 +424,34 @@ A conflict occurs when you modify the same data on two devices before they sync.
 - Your encrypted data is automatically backed up
 - If you lose your device, download from OneDrive on a new device
 
-**Strategy 3: Manual Export (Future Feature)**
-- Phase 5 will include export to JSON/CSV
-- You'll be able to save encrypted backups locally
+**Strategy 3: Encrypted Backup File (Recommended)**
+- Settings → Backup & Restore → **Download backup** (on phones: **Share / Save to Files…**)
+- Saves `lockt-backup-YYYY-MM-DD.json`. It is encrypted: opening it needs your master password or recovery phrase, so it is safe to keep on a USB drive, in OneDrive, or in your email
+- Make a new one after important changes; Settings shows when you last made one
+- Delete any unencrypted CSV exports once you have an encrypted backup
+
+### Restoring From a Backup File
+
+Use this if your browser's data was cleared, you're setting up a new device, or you need an older version of your data.
+
+1. **On a cleared or new browser:** open Lockt and tap **Restore from backup file** on the Account Recovery screen. **While unlocked:** Settings → Backup & Restore → **Restore from backup file…**
+2. Choose your `lockt-backup-….json` file. You can also use `lockt-data.encrypted` downloaded from OneDrive (Apps → Lockt), including an older version from OneDrive's version history.
+3. Enter the master password that was in effect when the backup was made (or tap **Use recovery phrase**). Nothing is changed yet; Lockt shows what the backup contains.
+4. Choose how it should sync:
+   - **Keep the newest version** (recommended): if OneDrive has newer data, sync replaces the restore with it.
+   - **Make this backup the current version:** sync uploads it and replaces the OneDrive copy. Use this if the OneDrive copy is wrong.
+5. Tap **Restore this backup**. Lockt unlocks with the restored data.
+
+⚠️ **Don't choose "Start Fresh Setup" or "Reset App"** when your data is missing. Restore from OneDrive or a backup file instead; a fresh vault can later sync over your real one.
+
+### Why Browser Data Disappears
+
+Lockt stores your data in the browser. Browsers can delete it when:
+- Storage runs low (Lockt asks the browser to protect its data; check Settings → Backup & Restore → Storage protection)
+- A browser setting clears site data on close. In Firefox: Settings → Privacy & Security → Cookies and Site Data → if "Delete cookies and site data when Firefox is closed" is on, add an exception for Lockt's address
+- You or a cleanup tool clears browsing data including site data
+
+Your OneDrive copy and backup files are not affected.
 
 ---
 

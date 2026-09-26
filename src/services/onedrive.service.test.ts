@@ -28,6 +28,12 @@ vi.mock('@azure/msal-browser', () => {
 
 // auth.config reads window.location at import time
 vi.stubGlobal('window', { location: { hostname: 'localhost' } });
+const memoryStorage = new Map<string, string>();
+vi.stubGlobal('localStorage', {
+  getItem: (k: string) => memoryStorage.get(k) ?? null,
+  setItem: (k: string, v: string) => void memoryStorage.set(k, v),
+  removeItem: (k: string) => void memoryStorage.delete(k),
+});
 
 const { oneDriveService } = await import('./onedrive.service');
 const { saltRecoveryService } = await import('./saltRecovery.service');
@@ -189,6 +195,80 @@ describe('oneDriveService', () => {
         .mockResolvedValueOnce(jsonResponse({ error: {} }, 404));
 
       expect(await saltRecoveryService.getFromOneDrive()).toBeNull();
+    });
+  });
+
+  describe('saltRecoveryService OneDrive recovery metadata', () => {
+    const ESCROW = { iv: 'ZXNj', salt: 'ZXNj', ciphertext: 'ZXNjcm93', version: 1 };
+    const OTHER_ESCROW = { iv: 'b3Ro', salt: 'b3Ro', ciphertext: 'b3RoZXI=', version: 1 };
+
+    // GET metadata item, then GET its content via downloadUrl
+    const existingFile = (content: unknown) => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(metadata()))
+        .mockResolvedValueOnce(jsonResponse(content));
+    };
+    const noFile = () => fetchMock.mockResolvedValueOnce(jsonResponse({ error: {} }, 404));
+    const putOk = () => fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'x' }));
+    const putCalls = () => fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT');
+    const putBody = () => JSON.parse(putCalls()[0][1].body);
+
+    it('saving salt alone keeps the escrow already stored for the same salt', async () => {
+      existingFile({ salt: 'SALT1', encryptedPassword: ESCROW, version: 2, createdAt: 1 });
+      await saltRecoveryService.saveSaltBackups('SALT1');
+      expect(putCalls()).toHaveLength(0); // already up to date
+    });
+
+    it('saving a new salt drops the escrow that belonged to the old salt', async () => {
+      existingFile({ salt: 'OLD', encryptedPassword: ESCROW, version: 2, createdAt: 1 });
+      putOk();
+      await saltRecoveryService.saveSaltBackups('NEW');
+      expect(putBody()).toMatchObject({ salt: 'NEW', version: 2 });
+      expect(putBody().encryptedPassword).toBeUndefined();
+    });
+
+    it('saving salt with escrow uploads both', async () => {
+      noFile();
+      putOk();
+      await saltRecoveryService.saveSaltBackups('SALT1', ESCROW);
+      expect(putBody()).toMatchObject({ salt: 'SALT1', encryptedPassword: ESCROW, version: 2 });
+    });
+
+    it('backfill adds a missing escrow for the same salt', async () => {
+      existingFile({ salt: 'SALT2', version: 1, createdAt: 1 });
+      existingFile({ salt: 'SALT2', version: 1, createdAt: 1 }); // re-read inside save
+      putOk();
+      await saltRecoveryService.backfillOneDriveBackup('SALT2', ESCROW);
+      expect(putBody()).toMatchObject({ salt: 'SALT2', encryptedPassword: ESCROW });
+    });
+
+    it('backfill never replaces an escrow already on OneDrive', async () => {
+      existingFile({ salt: 'SALT3', encryptedPassword: OTHER_ESCROW, version: 2, createdAt: 1 });
+      await saltRecoveryService.backfillOneDriveBackup('SALT3', ESCROW);
+      expect(putCalls()).toHaveLength(0);
+    });
+
+    it('backfill does nothing when OneDrive has a different salt (password changed elsewhere)', async () => {
+      existingFile({ salt: 'NEWER', encryptedPassword: OTHER_ESCROW, version: 2, createdAt: 1 });
+      await saltRecoveryService.backfillOneDriveBackup('STALE', ESCROW);
+      expect(putCalls()).toHaveLength(0);
+    });
+
+    it('backfill creates the file when it is missing, and only checks once per session', async () => {
+      noFile();
+      noFile();
+      putOk();
+      await saltRecoveryService.backfillOneDriveBackup('SALT4', ESCROW);
+      expect(putBody()).toMatchObject({ salt: 'SALT4', encryptedPassword: ESCROW });
+
+      fetchMock.mockClear();
+      await saltRecoveryService.backfillOneDriveBackup('SALT4', ESCROW);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('getOneDriveEscrow returns the stored escrow', async () => {
+      existingFile({ salt: 'SALT5', encryptedPassword: ESCROW, version: 2, createdAt: 1 });
+      expect(await saltRecoveryService.getOneDriveEscrow()).toEqual(ESCROW);
     });
   });
 });
