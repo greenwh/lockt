@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- No network access of any kind: this page can never send your data anywhere. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Lockt Emergency Viewer</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --text: #1f2933; --muted: #5f6b7a; --border: #d9dee5;
+    --accent: #0b63ce; --accent-text: #ffffff; --warn-bg: #fff6db; --warn-border: #f0d27a; --warn-text: #5c4400;
+    --err: #b42318; --err-bg: #fdecea; --mask: #e8ebef;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111418; --card: #1b2027; --text: #e6e9ee; --muted: #9aa5b4; --border: #2e3642;
+      --accent: #4d9bff; --accent-text: #0b1220; --warn-bg: #2d2610; --warn-border: #6b5a1f; --warn-text: #f3dc92;
+      --err: #ff8a80; --err-bg: #3a1714; --mask: #2a313b;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 28px 0 10px; }
+  h3 { font-size: 16px; margin: 0 0 8px; overflow-wrap: anywhere; }
+  p { margin: 0 0 10px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-top: 16px; }
+  .warn { background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn-text); border-radius: 10px; padding: 10px 14px; font-size: 14px; margin-top: 16px; }
+  .error { background: var(--err-bg); color: var(--err); border-radius: 10px; padding: 10px 14px; font-size: 14px; margin-top: 12px; }
+  label { display: block; font-weight: 600; font-size: 14px; margin: 14px 0 6px; }
+  input[type=password], input[type=search], textarea {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--bg); color: var(--text); font: inherit;
+  }
+  textarea { font-family: ui-monospace, Menlo, Consolas, monospace; resize: vertical; }
+  input:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button { font: inherit; cursor: pointer; border-radius: 8px; }
+  .primary { background: var(--accent); color: var(--accent-text); border: none; padding: 10px 20px; font-weight: 600; margin-top: 16px; }
+  .primary:disabled { opacity: .6; cursor: progress; }
+  .link { background: none; border: none; color: var(--accent); padding: 4px 0; text-decoration: underline; font-size: 14px; }
+  .small { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 2px 10px; font-size: 13px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-top: 16px; }
+  .toolbar input { flex: 1 1 240px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .chip { border: 1px solid var(--border); background: var(--card); color: var(--text); padding: 4px 12px; font-size: 13px; }
+  .entry { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; }
+  .row { display: grid; grid-template-columns: minmax(110px, 170px) 1fr; gap: 4px 12px; padding: 5px 0; border-top: 1px solid var(--border); align-items: start; }
+  .row:first-of-type { border-top: none; }
+  .key { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+  .val { overflow-wrap: anywhere; white-space: pre-wrap; }
+  .val-line { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+  .masked { background: var(--mask); border-radius: 4px; padding: 0 6px; letter-spacing: 2px; }
+  .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+  @media (max-width: 520px) { .row { grid-template-columns: 1fr; } .key { font-weight: 600; } }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🔐 Lockt Emergency Viewer</h1>
+  <p class="muted">Read-only access to a Lockt backup, without the app, a sign-in, or an internet connection. Everything happens in this browser tab; nothing is uploaded or saved.</p>
+
+  <noscript><div class="error">This page needs JavaScript. On iPhone/iPad, files opened from the Files app are only previewed — open this page in Safari, or use a computer.</div></noscript>
+  <div id="unsupported" class="error" hidden>This browser can't run the decryption (Web Crypto is unavailable). Open this file in a current version of Chrome, Edge, Firefox, or Safari.</div>
+
+  <section id="open-panel" class="panel">
+    <label for="file">1. Choose a backup file</label>
+    <input id="file" type="file">
+    <p class="muted">A <span class="mono">lockt-backup-….json</span> file from Settings → Backup &amp; Restore, or <span class="mono">lockt-data.encrypted</span> downloaded from OneDrive (Apps → Lockt).</p>
+    <p id="file-info" class="muted" hidden></p>
+
+    <form id="unlock-form" hidden>
+      <div id="password-block">
+        <label for="password">2. Master password for this backup</label>
+        <input id="password" type="password" autocomplete="current-password">
+      </div>
+      <div id="phrase-block" hidden>
+        <label for="phrase">2. Recovery phrase (12 words)</label>
+        <textarea id="phrase" rows="3" autocomplete="off" spellcheck="false"></textarea>
+      </div>
+      <button id="toggle-mode" class="link" type="button" hidden>Forgot the password? Use recovery phrase</button>
+      <div><button id="open-btn" class="primary" type="submit">Open backup</button></div>
+    </form>
+    <div id="open-error" class="error" role="alert" hidden></div>
+  </section>
+
+  <section id="data-panel" hidden>
+    <div class="warn">Your data is visible on screen. Close this tab or press <strong>Close &amp; clear</strong> when you're done. It clears itself after 10 minutes without activity.</div>
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="Search accounts, names, notes…" aria-label="Search">
+      <button id="clear-btn" class="small" type="button">Close &amp; clear</button>
+    </div>
+    <p id="data-info" class="muted" style="margin-top:10px"></p>
+    <nav id="chips" class="chips" aria-label="Sections"></nav>
+    <div id="sections"></div>
+  </section>
+</main>
+
+<!--
+  lockt-core: must match src/services/crypto.service.ts and backup.service.ts.
+  Verified by src/services/emergencyDecrypt.test.ts against the app's own encryption.
+-->
+<script id="lockt-core">
+(function (root) {
+  'use strict';
+  var ITERATIONS = 600000; // crypto.service PBKDF2_ITERATIONS
+  var BACKUP_FORMAT = 'lockt-backup';
+  var MAX_FORMAT_VERSION = 1;
+  var B64 = /^[A-Za-z0-9+/]+={0,2}$/;
+
+  function isB64(v) { return typeof v === 'string' && v.length > 0 && B64.test(v); }
+
+  function toEncrypted(v) {
+    if (!v || typeof v !== 'object') return null;
+    if (!isB64(v.iv) || !isB64(v.salt) || !isB64(v.ciphertext)) return null;
+    return { iv: v.iv, salt: v.salt, ciphertext: v.ciphertext };
+  }
+
+  function b64ToBytes(s) {
+    var bin = atob(s);
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  // PBKDF2-SHA256 (600k) -> AES-GCM-256, same as the app.
+  async function decryptString(enc, secret) {
+    var material = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), 'PBKDF2', false, ['deriveKey']);
+    var key = await crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: b64ToBytes(enc.salt), iterations: ITERATIONS, hash: 'SHA-256' },
+      material, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    var plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBytes(enc.iv) }, key, b64ToBytes(enc.ciphertext));
+    return new TextDecoder().decode(plain);
+  }
+
+  function parseBackup(text) {
+    var raw;
+    try { raw = JSON.parse(text); } catch (e) { throw new Error('This file is not a Lockt backup (it is not valid JSON).'); }
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('This file is not a Lockt backup.');
+
+    if (raw.format === BACKUP_FORMAT) {
+      if (typeof raw.formatVersion !== 'number' || raw.formatVersion > MAX_FORMAT_VERSION) {
+        throw new Error('This backup was made by a newer version of Lockt. Use the emergency page saved from that version.');
+      }
+      var vault = toEncrypted(raw.vault);
+      if (!vault) throw new Error('This backup file is damaged (the encrypted vault is missing or invalid).');
+      return {
+        source: 'Lockt backup file',
+        vault: vault,
+        escrow: toEncrypted(raw.encryptedPassword),
+        exportedAt: typeof raw.exportedAt === 'number' ? raw.exportedAt : null
+      };
+    }
+
+    var plainVault = toEncrypted(raw);
+    if (!plainVault) throw new Error('This file is not a Lockt backup. Choose a lockt-backup-*.json file or lockt-data.encrypted from OneDrive.');
+    var cfg = raw.config && typeof raw.config === 'object' ? raw.config : null;
+    return {
+      source: cfg ? 'Older Lockt export' : 'Vault file from OneDrive',
+      vault: plainVault,
+      escrow: null,
+      exportedAt: cfg && typeof cfg.exportDate === 'number' ? cfg.exportDate : null
+    };
+  }
+
+  // creds: { password } or { recoveryPhrase }
+  async function openBackup(backup, creds) {
+    var password = creds.password || '';
+    if (!password) {
+      var phrase = (creds.recoveryPhrase || '').trim().toLowerCase();
+      if (!phrase) throw new Error('Enter the master password or recovery phrase.');
+      if (!backup.escrow) throw new Error('This file does not include recovery-phrase data. Use the master password it was created with.');
+      try { password = await decryptString(backup.escrow, phrase); }
+      catch (e) { throw new Error('That recovery phrase does not match this backup.'); }
+    }
+    var json;
+    try { json = await decryptString(backup.vault, password); }
+    catch (e) {
+      throw new Error(creds.password
+        ? 'Incorrect password for this backup. Use the master password that was in effect when the backup was made.'
+        : 'The recovery phrase unlocked a password that does not open this backup.');
+    }
+    var data;
+    try { data = JSON.parse(json); } catch (e) { data = null; }
+    if (!data || !Array.isArray(data.passwords)) throw new Error('The backup decrypted, but its contents are not valid Lockt data.');
+    return data;
+  }
+
+  root.LocktCore = { parseBackup: parseBackup, openBackup: openBackup, ITERATIONS: ITERATIONS };
+})(globalThis);
+</script>
+
+<script>
+(function () {
+  'use strict';
+  var Core = globalThis.LocktCore;
+  var $ = function (id) { return document.getElementById(id); };
+  var IDLE_MS = 10 * 60 * 1000;
+
+  // Sections to show, in order. Unknown top-level/health keys are shown too (future-proof).
+  var SECTIONS = [
+    { label: 'Passwords', get: function (d) { return d.passwords; }, title: ['account'] },
+    { label: 'Credit Cards', get: function (d) { return d.creditCards; }, title: ['accountName'] },
+    { label: 'Crypto', get: function (d) { return d.crypto; }, title: ['account'] },
+    { label: 'Freetext', get: function (d) { return d.freetext; }, title: ['title'] },
+    { label: 'Emergency Info', get: function (d) { return d.health && d.health.emergency ? [d.health.emergency] : []; }, title: ['fullName'] },
+    { label: 'Health Providers', get: function (d) { return d.health && d.health.providers; }, title: ['drName'] },
+    { label: 'Medications', get: function (d) { return d.health && d.health.medications; }, title: ['name'] },
+    { label: 'Conditions', get: function (d) { return d.health && d.health.conditions; }, title: ['condition'] },
+    { label: 'Impairments', get: function (d) { return d.health && d.health.impairments; }, title: ['description'] },
+    { label: 'Medical Devices', get: function (d) { return d.health && d.health.devices; }, title: ['deviceName'] },
+    { label: 'Health Journal', get: function (d) { return d.health && d.health.journal; }, title: ['reasonForEntry'] },
+    { label: 'VA Claims', get: function (d) { return d.health && d.health.vso && d.health.vso.claims; }, title: ['claimName', 'conditionClaimed'] },
+    { label: 'VA Evidence', get: function (d) { return d.health && d.health.vso && d.health.vso.evidence; }, title: ['evidenceName'] },
+    { label: 'VA Actions', get: function (d) { return d.health && d.health.vso && d.health.vso.actions; }, title: ['actionItem'] },
+    { label: 'VA Exposures', get: function (d) { return d.health && d.health.vso && d.health.vso.exposures; }, title: ['substance', 'exposureType'] },
+    { label: 'VA Ratings', get: function (d) { return d.health && d.health.vso && d.health.vso.ratings; }, title: ['conditionName', 'diagnosticCode'] }
+  ];
+  var KNOWN_TOP = ['passwords', 'creditCards', 'crypto', 'freetext', 'health', 'metadata'];
+  var KNOWN_HEALTH = ['providers', 'conditions', 'impairments', 'journal', 'medications', 'devices', 'emergency', 'vso'];
+  var HIDDEN_KEYS = { id: 1, createdAt: 1, updatedAt: 1 };
+  var SENSITIVE = /(password|passcode|^pin$|pin$|csc|cvv|cardnumber|recoveryphrase|seed|privatekey|secret|ssn|accountnumber|routingnumber)/i;
+
+  var state = { backup: null, data: null, usePhrase: false, idleTimer: null };
+
+  if (!globalThis.crypto || !crypto.subtle) {
+    $('unsupported').hidden = false;
+    $('open-panel').hidden = true;
+    return;
+  }
+
+  var LABELS = { cscCode: 'CSC', pin: 'PIN', url: 'URL', icd10: 'ICD-10', dateOfBirth: 'Date of birth' };
+  function humanize(key) {
+    if (LABELS[key]) return LABELS[key];
+    var s = String(key).replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ');
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  function showError(msg) { var e = $('open-error'); e.textContent = msg; e.hidden = !msg; }
+
+  function copyText(text, btn) {
+    var done = function () { var old = btn.textContent; btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = old; }, 1200); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text) && done(); });
+    } else if (fallbackCopy(text)) { done(); }
+  }
+  function fallbackCopy(text) {
+    var ta = el('textarea'); ta.value = text; ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    var ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    ta.remove(); return ok;
+  }
+
+  function formatValue(key, value) {
+    if (value == null || value === '') return null;
+    if (typeof value === 'number' && /date|at$|time/i.test(key) && value > 1e11) return new Date(value).toLocaleString();
+    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+    if (Array.isArray(value)) {
+      if (value.length === 0) return null;
+      if (value.every(function (v) { return typeof v !== 'object' || v === null; })) return value.join(', ');
+      return JSON.stringify(value, null, 2);
+    }
+    if (typeof value === 'object') return Object.keys(value).length ? JSON.stringify(value, null, 2) : null;
+    return String(value);
+  }
+
+  function addRow(container, label, text, sensitive) {
+    var row = el('div', 'row');
+    row.appendChild(el('div', 'key', label));
+    var val = el('div', 'val');
+    var line = el('div', 'val-line');
+    var shown = el('span', sensitive ? 'masked' : '', sensitive ? '••••••••' : text);
+    line.appendChild(shown);
+    if (sensitive) {
+      var toggle = el('button', 'small', 'Show');
+      toggle.type = 'button';
+      toggle.addEventListener('click', function () {
+        var hidden = shown.className === 'masked';
+        shown.className = hidden ? 'mono' : 'masked';
+        shown.textContent = hidden ? text : '••••••••';
+        toggle.textContent = hidden ? 'Hide' : 'Show';
+      });
+      line.appendChild(toggle);
+    }
+    if (sensitive || text.length < 200) {
+      var copy = el('button', 'small', 'Copy');
+      copy.type = 'button';
+      copy.addEventListener('click', function () { copyText(text, copy); });
+      line.appendChild(copy);
+    }
+    val.appendChild(line);
+    row.appendChild(val);
+    container.appendChild(row);
+  }
+
+  function renderEntry(entry, titleKeys) {
+    var card = el('article', 'entry');
+    var title = '';
+    for (var i = 0; i < titleKeys.length && !title; i++) {
+      if (typeof entry[titleKeys[i]] === 'string') title = entry[titleKeys[i]];
+    }
+    if (title) card.appendChild(el('h3', null, title));
+    var searchText = [title];
+
+    Object.keys(entry).forEach(function (key) {
+      if (HIDDEN_KEYS[key] || titleKeys.indexOf(key) !== -1 && entry[key] === title) return;
+      if (key === 'fields' && Array.isArray(entry.fields)) {
+        entry.fields.forEach(function (f) {
+          if (!f || f.value == null || f.value === '') return;
+          var label = f.label || 'Field';
+          var sens = !!f.masked || SENSITIVE.test(label.replace(/\s+/g, ''));
+          addRow(card, label, String(f.value), sens);
+          searchText.push(label);
+          if (!sens) searchText.push(String(f.value));
+        });
+        return;
+      }
+      var text = formatValue(key, entry[key]);
+      if (text == null) return;
+      var sensitive = SENSITIVE.test(key);
+      addRow(card, humanize(key), text, sensitive);
+      if (!sensitive) searchText.push(text);
+    });
+
+    if (typeof entry.updatedAt === 'number' && entry.updatedAt > 1e11) card.appendChild(el('p', 'muted', 'Updated ' + new Date(entry.updatedAt).toLocaleDateString()));
+    card.setAttribute('data-search', searchText.join(' ').toLowerCase());
+    return card;
+  }
+
+  function extraSections(data) {
+    var extras = [];
+    Object.keys(data).forEach(function (k) {
+      if (KNOWN_TOP.indexOf(k) === -1 && Array.isArray(data[k])) extras.push({ label: humanize(k), items: data[k] });
+    });
+    if (data.health) Object.keys(data.health).forEach(function (k) {
+      if (KNOWN_HEALTH.indexOf(k) === -1 && Array.isArray(data.health[k])) extras.push({ label: humanize(k), items: data.health[k] });
+    });
+    return extras;
+  }
+
+  function render(data) {
+    var sections = $('sections'); var chips = $('chips');
+    sections.textContent = ''; chips.textContent = '';
+    var list = SECTIONS.map(function (s) { var items = s.get(data); return { label: s.label, items: Array.isArray(items) ? items : [], title: s.title }; })
+      .concat(extraSections(data).map(function (s) { return { label: s.label, items: s.items, title: ['name', 'title'] }; }));
+
+    list.forEach(function (s, idx) {
+      var items = s.items.filter(function (x) { return x && typeof x === 'object'; });
+      if (!items.length) return;
+      var id = 'section-' + idx;
+      var sec = el('section'); sec.id = id;
+      sec.appendChild(el('h2', null, s.label + ' (' + items.length + ')'));
+      items.forEach(function (item) { sec.appendChild(renderEntry(item, s.title)); });
+      sections.appendChild(sec);
+      var chip = el('button', 'chip', s.label + ' ' + items.length);
+      chip.type = 'button';
+      chip.addEventListener('click', function () { sec.scrollIntoView({ behavior: 'smooth' }); });
+      chips.appendChild(chip);
+    });
+
+    var modified = data.metadata && typeof data.metadata.lastModified === 'number' ? new Date(data.metadata.lastModified).toLocaleString() : 'unknown';
+    $('data-info').textContent = 'Data last changed: ' + modified + (state.backup && state.backup.exportedAt ? ' · Backup made: ' + new Date(state.backup.exportedAt).toLocaleString() : '');
+  }
+
+  function applySearch() {
+    var q = $('search').value.trim().toLowerCase();
+    document.querySelectorAll('#sections section').forEach(function (sec) {
+      var visible = 0;
+      sec.querySelectorAll('.entry').forEach(function (card) {
+        var match = !q || card.getAttribute('data-search').indexOf(q) !== -1;
+        card.hidden = !match; if (match) visible++;
+      });
+      sec.hidden = visible === 0;
+    });
+  }
+
+  function clearAll() {
+    state.data = null; state.backup = null;
+    $('sections').textContent = ''; $('chips').textContent = ''; $('data-info').textContent = '';
+    $('search').value = ''; $('password').value = ''; $('phrase').value = ''; $('file').value = '';
+    $('file-info').hidden = true; $('unlock-form').hidden = true;
+    $('data-panel').hidden = true; $('open-panel').hidden = false;
+    showError('');
+    clearTimeout(state.idleTimer);
+  }
+
+  function resetIdle() {
+    if (!state.data) return;
+    clearTimeout(state.idleTimer);
+    state.idleTimer = setTimeout(clearAll, IDLE_MS);
+  }
+
+  function setMode(usePhrase) {
+    state.usePhrase = usePhrase;
+    $('password-block').hidden = usePhrase;
+    $('phrase-block').hidden = !usePhrase;
+    $('toggle-mode').textContent = usePhrase ? 'Use master password instead' : 'Forgot the password? Use recovery phrase';
+  }
+
+  $('file').addEventListener('change', function (e) {
+    var file = e.target.files && e.target.files[0];
+    showError(''); $('unlock-form').hidden = true; $('file-info').hidden = true; state.backup = null;
+    if (!file) return;
+    if (file.size > 50 * 1024 * 1024) { showError('This file is too large to be a Lockt backup.'); return; }
+    file.text().then(function (text) {
+      try {
+        state.backup = Core.parseBackup(text);
+      } catch (err) { showError(err.message); return; }
+      $('file-info').textContent = state.backup.source + (state.backup.exportedAt ? ' · made ' + new Date(state.backup.exportedAt).toLocaleString() : '');
+      $('file-info').hidden = false;
+      $('toggle-mode').hidden = !state.backup.escrow;
+      setMode(false);
+      $('unlock-form').hidden = false;
+      $('password').focus();
+    }, function () { showError('Could not read this file.'); });
+  });
+
+  $('toggle-mode').addEventListener('click', function () { setMode(!state.usePhrase); });
+
+  $('unlock-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (!state.backup) return;
+    var btn = $('open-btn');
+    var creds = state.usePhrase ? { recoveryPhrase: $('phrase').value } : { password: $('password').value };
+    showError(''); btn.disabled = true; btn.textContent = 'Decrypting… (a few seconds)';
+    Core.openBackup(state.backup, creds).then(function (data) {
+      state.data = data;
+      $('password').value = ''; $('phrase').value = '';
+      render(data);
+      $('open-panel').hidden = true; $('data-panel').hidden = false;
+      resetIdle();
+      window.scrollTo(0, 0);
+    }, function (err) {
+      showError(err.message);
+    }).then(function () { btn.disabled = false; btn.textContent = 'Open backup'; });
+  });
+
+  $('search').addEventListener('input', applySearch);
+  $('clear-btn').addEventListener('click', clearAll);
+  ['click', 'keydown', 'scroll', 'touchstart'].forEach(function (evt) { document.addEventListener(evt, resetIdle, { passive: true }); });
+})();
+</script>
+</body>
+</html>

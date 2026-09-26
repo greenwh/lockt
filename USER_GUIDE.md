@@ -444,6 +444,18 @@ Use this if your browser's data was cleared, you're setting up a new device, or 
 
 ⚠️ **Don't choose "Start Fresh Setup" or "Reset App"** when your data is missing. Restore from OneDrive or a backup file instead; a fresh vault can later sync over your real one.
 
+### Emergency Viewer (No App Needed)
+
+If Lockt itself won't open, you can still read a backup:
+
+1. Settings → Backup & Restore → **Download emergency viewer** saves `lockt-emergency-viewer.html`. Keep it next to your backup files (USB drive, OneDrive).
+2. Open that file in any computer browser (Chrome, Edge, Firefox, Safari). It works with no internet connection. It is also online at `https://greenwh.github.io/lockt/emergency-decrypt.html`.
+3. Choose a backup file (or `lockt-data.encrypted` from OneDrive) and enter your master password or recovery phrase.
+
+It is read-only: passwords, card numbers and other secrets stay masked until you tap **Show**, and there's a **Copy** button for each value. The page cannot connect to the internet. Press **Close & clear** when done (it also clears itself after 10 idle minutes).
+
+On iPhone/iPad, a saved copy opened from the Files app only shows a preview; use the online address in Safari instead.
+
 ### Why Browser Data Disappears
 
 Lockt stores your data in the browser. Browsers can delete it when:

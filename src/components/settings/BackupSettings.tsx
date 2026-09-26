@@ -77,6 +77,21 @@ const BackupSettings: React.FC = () => {
     }
   };
 
+  const emergencyPageUrl = `${import.meta.env.BASE_URL}emergency-decrypt.html`;
+
+  const handleDownloadEmergencyPage = async () => {
+    try {
+      const response = await fetch(emergencyPageUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = new Blob([await response.text()], { type: 'text/html' });
+      saveBlob(blob, 'lockt-emergency-viewer.html');
+      toast.success('Saved lockt-emergency-viewer.html — keep it with your backup files.');
+    } catch (err) {
+      console.error('Emergency page download failed:', err);
+      toast.error('Could not download the emergency viewer. Try again while online.');
+    }
+  };
+
   const handleRequestPersistence = async () => {
     const status = await storagePersistenceService.request();
     setPersistence(status);
@@ -135,6 +150,26 @@ const BackupSettings: React.FC = () => {
             </Buttons>
           </>
         )}
+      </Card>
+
+      <Card>
+        <CardTitle>Emergency viewer</CardTitle>
+        <Text>
+          A single page that opens a backup file read-only in any browser — no app, no sign-in, no internet. Keep a
+          copy next to your backup files in case Lockt itself won't open.
+        </Text>
+        <Buttons>
+          <SecondaryButton type="button" onClick={handleDownloadEmergencyPage}>
+            ⬇️ Download emergency viewer
+          </SecondaryButton>
+        </Buttons>
+        <Small>
+          Also available online at{' '}
+          <a href={emergencyPageUrl} target="_blank" rel="noopener noreferrer">
+            {new URL(emergencyPageUrl, window.location.href).href}
+          </a>
+          . On iPhone, open it in Safari (the Files app only previews it).
+        </Small>
       </Card>
 
       <Card>

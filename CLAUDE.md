@@ -549,6 +549,7 @@ await disableBiometric(credentialId);
 - **Recovery-phrase escrow on OneDrive:** `lockt-salt-metadata.json` v2 = `{ salt, encryptedPassword }`. The escrow is only valid with its salt: a salt-only write keeps the escrow only if salts match; `backfillOneDriveBackup()` (after each successful sync) never overwrites an existing escrow or a different salt.
 - **Recovery-phrase unlock** (`cryptoService.resolvePasswordWithRecoveryPhrase`) tries the local escrow, then OneDrive's, and uses the first whose password actually decrypts the vault; it repairs the local copy.
 - **Persistent storage:** `navigator.storage.persist()` requested at startup once an account exists; status shown in Settings.
+- **Emergency viewer:** `public/emergency-decrypt.html` is a standalone, offline, read-only backup viewer (CSP `default-src 'none'`, textContent-only rendering). It carries its **own copy** of the decrypt/parse logic in `<script id="lockt-core">`. **If you change encryption parameters or the backup format, update that block too** — `src/services/emergencyDecrypt.test.ts` runs it against the app's real services and fails on drift. A newer backup `formatVersion` must also be accepted there.
 
 ### Debugging Encryption Issues
 
