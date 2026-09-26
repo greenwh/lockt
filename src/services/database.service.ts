@@ -23,6 +23,26 @@ interface LocktDB extends DBSchema {
 
 class DatabaseService {
   private db: IDBPDatabase<LocktDB> | null = null;
+  private vaultListeners = new Set<() => void>();
+
+  /**
+   * Subscribe to changes of the stored vault (edits, sync downloads, password
+   * change, restore). Returns an unsubscribe function.
+   */
+  onVaultChanged(listener: () => void): () => void {
+    this.vaultListeners.add(listener);
+    return () => this.vaultListeners.delete(listener);
+  }
+
+  private notifyVaultChanged(): void {
+    this.vaultListeners.forEach((listener) => {
+      try {
+        listener();
+      } catch (error) {
+        console.error('Vault change listener failed:', error);
+      }
+    });
+  }
   private readonly DB_NAME = 'lockt-db';
   private readonly DB_VERSION = 2; // Incremented for biometric credentials
 
@@ -55,6 +75,7 @@ class DatabaseService {
   async saveEncryptedData(data: EncryptedData): Promise<void> {
     await this.init();
     await this.db!.put('encrypted-data', data, 'main');
+    this.notifyVaultChanged();
   }
 
   /**
@@ -146,6 +167,7 @@ class DatabaseService {
       params.clearBiometrics ? tx.objectStore('biometric-credentials').clear() : Promise.resolve(),
       tx.done,
     ]);
+    this.notifyVaultChanged();
 
     await this.ensureDeviceId();
   }
@@ -164,6 +186,7 @@ class DatabaseService {
   async clearAll(): Promise<void> {
     await this.init();
     await this.db!.clear('encrypted-data');
+    this.notifyVaultChanged();
     await this.db!.clear('app-config');
     // Also clear biometric credentials, which hold an encrypted copy of the
     // master password — leaving these behind after a reset is a security leak.

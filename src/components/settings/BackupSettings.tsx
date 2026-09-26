@@ -3,7 +3,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { useToast } from '../../hooks/useToast';
-import { backupService, BackupError } from '../../services/backup.service';
+import { backupService } from '../../services/backup.service';
+import { databaseService } from '../../services/database.service';
 import { storagePersistenceService } from '../../services/storagePersistence.service';
 import type { PersistenceStatus } from '../../services/storagePersistence.service';
 import RestoreBackupForm from '../backup/RestoreBackupForm';
@@ -37,10 +38,26 @@ const BackupSettings: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [showRestore, setShowRestore] = useState(false);
 
+  // Share must be called synchronously inside the tap (Safari and others reject
+  // navigator.share() once the tap's user activation has passed an await), so the
+  // file is prepared ahead of time and rebuilt whenever the stored vault changes.
+  const [prepared, setPrepared] = useState<{ file: File; filename: string } | null>(null);
+
+  const prepareShareFile = useCallback(async () => {
+    try {
+      const { blob, filename } = await backupService.createBackupFile();
+      setPrepared({ file: new File([blob], filename, { type: 'application/json' }), filename });
+    } catch {
+      setPrepared(null);
+    }
+  }, []);
+
   const canShareFiles =
+    !!prepared &&
     typeof navigator !== 'undefined' &&
+    typeof navigator.share === 'function' &&
     typeof navigator.canShare === 'function' &&
-    navigator.canShare({ files: [new File([''], 'test.json', { type: 'application/json' })] });
+    navigator.canShare({ files: [prepared.file] });
 
   const refresh = useCallback(async () => {
     setLastBackup(await backupService.getLastBackupExportedAt());
@@ -49,32 +66,46 @@ const BackupSettings: React.FC = () => {
 
   useEffect(() => {
     refresh();
-  }, [refresh]);
+    prepareShareFile();
+    const unsubscribe = databaseService.onVaultChanged(() => {
+      prepareShareFile();
+    });
+    return unsubscribe;
+  }, [refresh, prepareShareFile]);
 
-  const handleExport = async (viaShare: boolean) => {
+  const recordExport = async (filename: string) => {
+    await backupService.markBackupExported();
+    await refresh();
+    toast.success(`Backup saved as ${filename}`);
+  };
+
+  const handleDownload = async () => {
     setBusy(true);
     try {
       const { blob, filename } = await backupService.createBackupFile();
-      if (viaShare) {
-        const file = new File([blob], filename, { type: 'application/json' });
-        try {
-          await navigator.share({ files: [file], title: 'Lockt backup' });
-        } catch (err) {
-          if (err instanceof DOMException && err.name === 'AbortError') return; // user cancelled
-          throw err;
-        }
-      } else {
-        saveBlob(blob, filename);
-      }
-      await backupService.markBackupExported();
-      await refresh();
-      toast.success(`Backup saved as ${filename}`);
+      saveBlob(blob, filename);
+      await recordExport(filename);
     } catch (err) {
       console.error('Backup export failed:', err);
-      toast.error(err instanceof BackupError ? err.message : 'Could not create the backup file.');
+      toast.error(err instanceof Error ? `Could not create the backup file: ${err.message}` : 'Could not create the backup file.');
     } finally {
       setBusy(false);
     }
+  };
+
+  // No await before navigator.share(): keeps the tap's user activation.
+  const handleShare = () => {
+    if (!prepared) return;
+    const { file, filename } = prepared;
+    navigator.share({ files: [file], title: 'Lockt backup' }).then(
+      () => recordExport(filename),
+      (err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return; // user cancelled
+        console.error('Backup share failed:', err);
+        const detail = err instanceof Error ? ` (${err.name}: ${err.message})` : '';
+        toast.error(`Sharing isn't available here${detail}. Use Download backup instead.`);
+      }
+    );
   };
 
   const emergencyPageUrl = `${import.meta.env.BASE_URL}emergency-decrypt.html`;
@@ -118,11 +149,11 @@ const BackupSettings: React.FC = () => {
           {lastBackup && backupIsStale && ' — consider making a new one.'}
         </Status>
         <Buttons>
-          <Button type="button" onClick={() => handleExport(false)} disabled={busy}>
+          <Button type="button" onClick={handleDownload} disabled={busy}>
             {busy ? 'Preparing…' : '⬇️ Download backup'}
           </Button>
           {canShareFiles && (
-            <SecondaryButton type="button" onClick={() => handleExport(true)} disabled={busy}>
+            <SecondaryButton type="button" onClick={handleShare} disabled={busy}>
               Share / Save to Files…
             </SecondaryButton>
           )}

@@ -274,6 +274,29 @@ describe('backupService.restoreBackup', () => {
   });
 });
 
+describe('databaseService.onVaultChanged', () => {
+  it('notifies on save, restore and clear, and stops after unsubscribe', async () => {
+    let calls = 0;
+    const unsubscribe = databaseService.onVaultChanged(() => calls++);
+
+    await databaseService.saveEncryptedData(vault);
+    expect(calls).toBe(1);
+
+    const verified = await backupService.verifyBackup(backupService.parseBackupFile(JSON.stringify(vault)), {
+      password: PASSWORD,
+    });
+    await backupService.restoreBackup(verified, 'keep-newer', PASSWORD);
+    expect(calls).toBe(2);
+
+    await databaseService.clearAll();
+    expect(calls).toBe(3);
+
+    unsubscribe();
+    await databaseService.saveEncryptedData(vault);
+    expect(calls).toBe(3);
+  });
+});
+
 describe('cryptoService.resolvePasswordWithRecoveryPhrase', () => {
   it('skips a stale escrow and uses one that opens the vault', async () => {
     const stale = await cryptoService.encryptPasswordWithRecoveryPhrase(OTHER_PASSWORD, PHRASE);
